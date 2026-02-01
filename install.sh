@@ -5,7 +5,7 @@ set -e
 # 基础配置（仅需替换 REPO_RAW_URL 中的 GitHub 用户名）
 INSTALL_DIR="/opt/xboard-mini"
 WEB_PORT="8080"
-PHP_VERSION="8.2"  # 保持8.2，ARM/x86全兼容
+PHP_VERSION="8.3"  # ARM/x86全兼容
 REPO_RAW_URL="https://raw.githubusercontent.com/HYT-1840/xboard-mini/main"
 
 # 颜色输出
