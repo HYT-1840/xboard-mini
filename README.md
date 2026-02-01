@@ -14,10 +14,10 @@
 - Debian 11 (Bullseye) / 12 (Bookworm)
 - 支持所有基于 APT 包管理器的 Debian 系发行版
 
-
-一键部署命令
+安装方式 1
 - curl -fsSL https://raw.githubusercontent.com/HYT-1840/xboard-mini/main/install.sh -o install.sh && chmod +x install.sh && ./install.sh
-
+安装方式 2
+- bash -c "$(curl -fsSL https://raw.githubusercontent.com/HYT-1840/xboard-mini/main/install.sh)"
 
 面板管理命令
 安装完成后，可使用以下命令管理面板服务：
