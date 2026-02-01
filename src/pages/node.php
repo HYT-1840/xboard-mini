@@ -2,12 +2,12 @@
 session_start();
 // 权限验证：未登录跳转到登录页
 if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    header('Location: /index.php');
+    header('Location: ../public/index.php');
     exit;
 }
 
 // 数据库连接
-$db = new SQLite3('../../database.db');
+$db = new SQLite3('../database.db');
 // 查询所有节点数据（示例，可根据实际表结构调整字段）
 $nodes = $db->query("SELECT * FROM node ORDER BY id DESC");
 ?>
