@@ -1,8 +1,8 @@
 <?php
 session_start();
-// 已登录则跳转到管理页
+// 已登录则跳转到管理页（去掉/pages/前缀）
 if (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true) {
-    header('Location: ../pages/admin.php');
+    header('Location: /admin.php');
     exit;
 }
 
@@ -15,6 +15,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($username) || empty($password)) {
         $error = '用户名和密码不能为空';
     } else {
+        // 修正：数据库路径 ../database.db（public/index.php → 上级INSTALL_DIR）
         $db = new SQLite3('../database.db');
         $stmt = $db->prepare("SELECT password FROM admin WHERE username = :username");
         $stmt->bindValue(':username', $username, SQLITE3_TEXT);
@@ -24,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($admin && password_verify($password, $admin['password'])) {
             $_SESSION['admin_logged_in'] = true;
             $_SESSION['admin_username'] = $username;
-            header('Location: ../pages/admin.php');
+            header('Location: /admin.php'); // 跳转管理首页（去掉/pages/）
             exit;
         } else {
             $error = '用户名或密码错误';
@@ -38,7 +39,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Xboard-Mini - 管理员登录</title>
-    <!-- 引入轻量图标库 -->
     <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * {
@@ -85,7 +85,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             padding: 20px;
             position: relative;
         }
-        /* 深色模式切换按钮 */
         .theme-toggle {
             position: absolute;
             top: 20px;
@@ -186,7 +185,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(102,126,234,0.2);
         }
-        /* 加载动画 */
         .loading-spin {
             display: none;
             animation: spin 1s linear infinite;
@@ -204,7 +202,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </style>
 </head>
 <body>
-    <!-- 深色模式切换 -->
     <button class="theme-toggle" id="themeBtn" title="切换深色/浅色模式">
         <i class="fas fa-moon"></i>
     </button>
@@ -242,13 +239,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 
     <script>
-        // 深色模式切换
         const themeBtn = document.getElementById('themeBtn');
         const html = document.documentElement;
         const icon = themeBtn.querySelector('i');
-        
-        // 读取本地存储主题
         const savedTheme = localStorage.getItem('theme') || 'light';
+        
         html.setAttribute('data-theme', savedTheme);
         updateThemeIcon(savedTheme);
         
@@ -261,14 +256,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         });
         
         function updateThemeIcon(theme) {
-            if (theme === 'dark') {
-                icon.className = 'fas fa-sun';
-            } else {
-                icon.className = 'fas fa-moon';
-            }
+            icon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
         }
 
-        // 登录加载动画
         const loginForm = document.getElementById('loginForm');
         const submitBtn = document.getElementById('submitBtn');
         const loadingIcon = document.getElementById('loadingIcon');
