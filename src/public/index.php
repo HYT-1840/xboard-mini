@@ -2,7 +2,7 @@
 session_start();
 // 已登录则跳转到管理页
 if (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true) {
-    header('Location: /pages/admin.php');
+    header('Location: ../pages/admin.php');
     exit;
 }
 
@@ -24,7 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($admin && password_verify($password, $admin['password'])) {
             $_SESSION['admin_logged_in'] = true;
             $_SESSION['admin_username'] = $username;
-            header('Location: /pages/admin.php');
+            header('Location: ../pages/admin.php');
             exit;
         } else {
             $error = '用户名或密码错误';
