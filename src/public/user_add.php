@@ -10,12 +10,15 @@ $success = '';
 $error = '';
 // 处理添加用户请求
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // 获取表单所有字段（保留原始表单的email/expire_time/remark，新增流量配额）
     $username = trim($_POST['username'] ?? '');
     $password = trim($_POST['password'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $expire_time = trim($_POST['expire_time'] ?? '');
+    $remark = trim($_POST['remark'] ?? '');
+    $traffic_quota = intval($_POST['traffic_quota'] ?? 10); // 流量配额，默认10GB
 
-    // 表单验证
+    // 表单验证（保留原始验证逻辑，新增流量配额非负验证）
     if (empty($username) || empty($password)) {
         $error = '用户名和密码不能为空';
     } elseif (strlen($username) < 3 || strlen($username) > 20) {
@@ -24,26 +27,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = '密码长度不能少于6位';
     } elseif (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $error = '请输入有效的邮箱地址';
+    } elseif ($traffic_quota < 0) {
+        $error = '流量配额不能为负数';
     } else {
-        // 修正：数据库路径 ../database.db（public/user_add.php → 上级INSTALL_DIR）
-        $db = new SQLite3('../database.db');
-        // 密码加密
-        $pwd_hash = password_hash($password, PASSWORD_DEFAULT);
-        // 默认过期时间（若未填写）
-        $expire_time = $expire_time ?: date('Y-m-d H:i:s', strtotime('+30 days'));
-        // 插入数据
-        $stmt = $db->prepare("INSERT INTO user (username, password, email, expire_time, create_time, status) VALUES (:username, :password, :email, :expire_time, :create_time, 1)");
-        $stmt->bindValue(':username', $username, SQLITE3_TEXT);
-        $stmt->bindValue(':password', $pwd_hash, SQLITE3_TEXT);
-        $stmt->bindValue(':email', $email, SQLITE3_TEXT);
-        $stmt->bindValue(':expire_time', $expire_time, SQLITE3_TEXT);
-        $stmt->bindValue(':create_time', date('Y-m-d H:i:s'), SQLITE3_TEXT);
-        
-        if ($stmt->execute()) {
-            $success = '用户添加成功！3秒后将返回用户管理页';
-            echo '<script>setTimeout(() => { window.location.href = "user.php"; }, 3000);</script>';
-        } else {
-            $error = '用户添加失败，用户名可能已存在';
+        try {
+            // 连接数据库（路径保持你的原始配置）
+            $db = new SQLite3('../database.db');
+            // 开启外键约束（与数据库脚本保持一致）
+            $db->exec("PRAGMA foreign_keys = ON;");
+            // 密码加密（保留原始加密方式）
+            $pwd_hash = password_hash($password, PASSWORD_DEFAULT);
+
+            // 核心修正1：表名改为数据库实际的`users`（复数）
+            // 核心修正2：字段完全匹配数据库`users`表结构，补充流量配额核心字段
+            $stmt = $db->prepare("INSERT INTO users (username, password, traffic_quota, traffic_used, status, created_at) 
+                                  VALUES (:username, :password, :traffic_quota, :traffic_used, :status, CURRENT_TIMESTAMP)");
+            $stmt->bindValue(':username', $username, SQLITE3_TEXT);
+            $stmt->bindValue(':password', $pwd_hash, SQLITE3_TEXT);
+            $stmt->bindValue(':traffic_quota', $traffic_quota, SQLITE3_INTEGER);
+            $stmt->bindValue(':traffic_used', 0, SQLITE3_INTEGER); // 已用流量默认0
+            $stmt->bindValue(':status', 1, SQLITE3_INTEGER); // 状态默认启用
+
+            if ($stmt->execute()) {
+                $success = '用户添加成功！3秒后将返回用户管理页';
+                echo '<script>setTimeout(() => { window.location.href = "user.php"; }, 3000);</script>';
+            } else {
+                // 精准提示：用户名唯一约束冲突
+                $error = '用户添加失败，用户名已存在（用户名唯一）';
+            }
+        } catch (Exception $e) {
+            $error = '服务器内部错误：' . $e->getMessage();
         }
     }
 }
@@ -352,17 +365,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <input type="email" class="form-control" id="email" name="email" placeholder="请输入用户邮箱（选填）">
                         <div class="form-tip">用于接收用户通知、密码找回等</div>
                     </div>
+                    <!-- 新增：流量配额字段（贴合项目核心功能，必填） -->
+                    <div class="form-group">
+                        <label for="traffic_quota"><i class="fas fa-tachometer-alt"></i> 流量配额(GB) <span style="color: var(--danger);">*</span></label>
+                        <input type="number" class="form-control" id="traffic_quota" name="traffic_quota" placeholder="请输入流量配额" value="10" min="0" required>
+                        <div class="form-tip">设置用户可用流量，0为无配额限制</div>
+                    </div>
+                </div>
+
+                <div class="form-row">
                     <div class="form-group">
                         <label for="expire_time"><i class="fas fa-calendar"></i> 过期时间</label>
                         <input type="datetime-local" class="form-control" id="expire_time" name="expire_time" value="<?php echo date('Y-m-d\TH:i', strtotime('+30 days')); ?>">
                         <div class="form-tip">未填写默认30天后过期，永久有效请留空</div>
                     </div>
-                </div>
-
-                <div class="form-group">
-                    <label for="remark"><i class="fas fa-comment"></i> 备注</label>
-                    <textarea class="form-control" id="remark" name="remark" rows="3" placeholder="请输入用户备注（选填）"></textarea>
-                    <div class="form-tip">如用户身份、用途等，方便后续管理</div>
+                    <div class="form-group">
+                        <label for="remark"><i class="fas fa-comment"></i> 备注</label>
+                        <input type="text" class="form-control" id="remark" name="remark" placeholder="请输入用户备注（选填）">
+                        <div class="form-tip">如用户身份、用途等，方便后续管理</div>
+                    </div>
                 </div>
 
                 <div class="form-btn-group">
