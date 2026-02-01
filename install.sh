@@ -1,10 +1,11 @@
+
 #!/bin/bash
 set -e
 
-# 基础配置
+# 基础配置（仅需替换 REPO_RAW_URL 中的 GitHub 用户名）
 INSTALL_DIR="/opt/xboard-mini"
 WEB_PORT="8080"
-PHP_VERSION="8.2"
+PHP_VERSION="8.2"  # 保持8.2，ARM/x86全兼容
 REPO_RAW_URL="https://raw.githubusercontent.com/HYT-1840/xboard-mini/main"
 
 # 颜色输出
@@ -13,8 +14,25 @@ error() { echo -e "\033[31m[ERROR] $1\033[0m"; exit 1; }
 
 # 系统检测
 if [[ ! -x /usr/bin/apt ]]; then
-    error "仅支持 Ubuntu/Debian 系统"
+    error "仅支持 Ubuntu/Debian 系统，请更换系统后重新安装"
 fi
+
+# ====================== 新增：配置PHP官方源（核心修复） ======================
+info "配置PHP官方源，适配Ubuntu 20.04+及ARM/x86架构"
+apt install -y software-properties-common lsb-release ca-certificates wget
+# 添加PHP官方GPG密钥（避免源验证失败）
+wget -O /etc/apt/trusted.gpg.d/php.gpg https://packages.sury.org/php/apt.gpg
+# 添加PHP官方源（自动识别x86/ARM64架构）
+echo "deb https://packages.sury.org/php/ $(lsb_release -sc) main" | tee /etc/apt/sources.list.d/php.list
+# 刷新源（使新添加的PHP源生效）
+apt update -y
+# ============================================================================
+
+# 安装核心依赖（现在可正常找到php8.2相关包）
+info "安装 Nginx、PHP$PHP_VERSION、SQLite3 核心依赖"
+apt install -y nginx php${PHP_VERSION}-fpm php${PHP_VERSION}-sqlite3 php${PHP_VERSION}-curl php${PHP_VERSION}-mbstring sqlite3
+
+# 后续原有代码（目录创建、拉取源码、优化配置等）保持不变 ↓
 
 # 安装依赖
 info "更新源并安装 Nginx PHP$PHP_VERSION SQLite3"
