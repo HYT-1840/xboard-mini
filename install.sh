@@ -4,7 +4,7 @@ set -e
 # 基础配置
 INSTALL_DIR="/opt/xboard-mini"
 WEB_PORT="8080"
-PHP_VERSION="8.1"
+PHP_VERSION="8.2"
 REPO_RAW_URL="https://raw.githubusercontent.com/你的GitHub用户名/xboard-mini/main"
 
 # 颜色输出
