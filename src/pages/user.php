@@ -2,19 +2,19 @@
 session_start();
 // 权限验证：未登录跳转到登录页
 if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    header('Location: /index.php');
+    header('Location: ../public/index.php');
     exit;
 }
 
 // 处理退出登录
 if (isset($_GET['action']) && $_GET['action'] === 'logout') {
     session_destroy();
-    header('Location: /index.php');
+    header('Location: ../public/index.php');
     exit;
 }
 
 // 数据库连接
-$db = new SQLite3('../../database.db');
+$db = new SQLite3('../database.db');
 // 查询所有用户数据（示例，可根据实际user表结构调整字段）
 $users = $db->query("SELECT * FROM user ORDER BY id DESC");
 ?>
