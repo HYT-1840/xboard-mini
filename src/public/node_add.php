@@ -11,29 +11,41 @@ $error = '';
 // 处理添加节点请求
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = trim($_POST['name'] ?? '');
-    $address = trim($_POST['address'] ?? '');
+    $host = trim($_POST['host'] ?? ''); // 修正：字段名从address改为host（匹配数据库）
     $port = intval($_POST['port'] ?? 0);
-    $status = intval($_POST['status'] ?? 0);
+    $protocol = trim($_POST['protocol'] ?? ''); // 新增：处理数据库必选的protocol字段
+    $remark = trim($_POST['remark'] ?? '');
+    $status = intval($_POST['status'] ?? 1); // 默认启用节点
 
-    // 表单验证
-    if (empty($name) || empty($address) || $port <= 0 || $port > 65535) {
-        $error = '节点名称、地址不能为空，端口必须为1-65535的有效数字';
+    // 表单验证（保留原始逻辑，新增协议非空验证）
+    if (empty($name) || empty($host) || $port <= 0 || $port > 65535 || empty($protocol)) {
+        $error = '节点名称、地址、协议不能为空，端口必须为1-65535的有效数字';
     } else {
-        // 修正：数据库路径 ../database.db（public/node_add.php → 上级INSTALL_DIR）
-        $db = new SQLite3('../database.db');
-        // 插入数据
-        $stmt = $db->prepare("INSERT INTO node (name, address, port, status, create_time) VALUES (:name, :address, :port, :status, :create_time)");
-        $stmt->bindValue(':name', $name, SQLITE3_TEXT);
-        $stmt->bindValue(':address', $address, SQLITE3_TEXT);
-        $stmt->bindValue(':port', $port, SQLITE3_INTEGER);
-        $stmt->bindValue(':status', $status, SQLITE3_INTEGER);
-        $stmt->bindValue(':create_time', date('Y-m-d H:i:s'), SQLITE3_TEXT);
-        
-        if ($stmt->execute()) {
-            $success = '节点添加成功！3秒后将返回节点管理页';
-            echo '<script>setTimeout(() => { window.location.href = "node.php"; }, 3000);</script>';
-        } else {
-            $error = '节点添加失败，该节点地址+端口可能已存在';
+        try {
+            // 连接数据库，保持原有路径
+            $db = new SQLite3('../database.db');
+            // 开启外键约束，与数据库初始化脚本、其他页面保持一致
+            $db->exec("PRAGMA foreign_keys = ON;");
+
+            // 核心修正1：表名从node改为nodes（匹配数据库实际表名）
+            // 核心修正2：字段完全匹配nodes表结构，替换/补充必选字段
+            $stmt = $db->prepare("INSERT INTO nodes (name, host, port, protocol, remark, status, created_at) 
+                                  VALUES (:name, :host, :port, :protocol, :remark, :status, CURRENT_TIMESTAMP)");
+            $stmt->bindValue(':name', $name, SQLITE3_TEXT);
+            $stmt->bindValue(':host', $host, SQLITE3_TEXT);
+            $stmt->bindValue(':port', $port, SQLITE3_INTEGER);
+            $stmt->bindValue(':protocol', $protocol, SQLITE3_TEXT);
+            $stmt->bindValue(':remark', $remark, SQLITE3_TEXT);
+            $stmt->bindValue(':status', $status, SQLITE3_INTEGER);
+
+            if ($stmt->execute()) {
+                $success = '节点添加成功！3秒后将返回节点管理页';
+                echo '<script>setTimeout(() => { window.location.href = "node.php"; }, 3000);</script>';
+            } else {
+                $error = '节点添加失败，该节点地址+端口可能已存在';
+            }
+        } catch (Exception $e) {
+            $error = '服务器内部错误：' . $e->getMessage();
         }
     }
 }
@@ -361,9 +373,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <input type="text" class="form-control" id="name" name="name" placeholder="请输入节点名称（如：北京节点-联通）" required>
                         <div class="form-tip">节点标识名称，方便后续管理区分</div>
                     </div>
+                    <!-- 修正：输入框name从address改为host（匹配数据库字段），标签文字不变不影响使用 -->
                     <div class="form-group">
-                        <label for="address"><i class="fas fa-globe"></i> 节点地址 <span style="color: var(--danger);">*</span></label>
-                        <input type="text" class="form-control" id="address" name="address" placeholder="请输入节点IP/域名" required>
+                        <label for="host"><i class="fas fa-globe"></i> 节点地址 <span style="color: var(--danger);">*</span></label>
+                        <input type="text" class="form-control" id="host" name="host" placeholder="请输入节点IP/域名" required>
                         <div class="form-tip">支持公网IP、内网IP或域名，请勿加http/https</div>
                     </div>
                 </div>
@@ -374,14 +387,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <input type="number" class="form-control" id="port" name="port" placeholder="请输入节点端口" min="1" max="65535" required>
                         <div class="form-tip">有效端口范围：1-65535，需确保节点服务器该端口已开放</div>
                     </div>
+                    <!-- 新增：协议选择框（数据库必选字段，提供常用协议选项） -->
                     <div class="form-group">
-                        <label><i class="fas fa-toggle-on"></i> 节点状态</label>
-                        <div class="form-switch">
-                            <input type="checkbox" id="status" name="status" checked value="1">
-                            <label for="status" style="margin: 0; color: var(--text-secondary);">启用节点（取消则禁用）</label>
-                        </div>
-                        <div class="form-tip">禁用后用户将无法访问该节点</div>
+                        <label for="protocol"><i class="fas fa-network-wired"></i> 节点协议 <span style="color: var(--danger);">*</span></label>
+                        <select class="form-control" id="protocol" name="protocol" required>
+                            <option value="">请选择节点协议</option>
+                            <option value="TCP">TCP</option>
+                            <option value="UDP">UDP</option>
+                            <option value="HTTP">HTTP</option>
+                            <option value="HTTPS">HTTPS</option>
+                            <option value="WS">WS</option>
+                            <option value="WSS">WSS</option>
+                        </select>
+                        <div class="form-tip">选择节点使用的通信协议，需与节点服务器配置一致</div>
                     </div>
+                </div>
+
+                <div class="form-group">
+                    <label><i class="fas fa-toggle-on"></i> 节点状态</label>
+                    <div class="form-switch">
+                        <input type="checkbox" id="status" name="status" checked value="1">
+                        <label for="status" style="margin: 0; color: var(--text-secondary);">启用节点（取消则禁用）</label>
+                    </div>
+                    <div class="form-tip">禁用后用户将无法访问该节点</div>
                 </div>
 
                 <div class="form-group">
