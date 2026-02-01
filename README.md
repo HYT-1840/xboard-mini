@@ -4,7 +4,6 @@
 项目特性
 - 极致轻量化，内存占用低，适合 1 核 1G/1 核 2G 入门级服务器
 - 原生支持 x86_64/ARM64(aarch64) 双架构，兼容甲骨文 ARM 等云服务器
-- 仅依赖系统官方源，无第三方 PHP 源，杜绝 418、签名失效、包找不到等错误
 - 自动适配系统版本、内存规格，智能调配 PHP-FPM 参数
 - Nginx+PHP-FPM+SQLite3 极简架构，无需数据库服务
 - 一键安装、一键管理，部署流程全自动
@@ -15,19 +14,10 @@
 - Debian 11 (Bullseye) / 12 (Bookworm)
 - 支持所有基于 APT 包管理器的 Debian 系发行版
 
-支持架构
-- x86_64 (amd64)
-- ARM64 (aarch64)：甲骨文云、AWS Graviton、Azure ARM 等机型通用
-
-服务器配置要求
-- 最低：1 核 1G 内存，10G 以上硬盘
-- 推荐：1 核 2G 及以上，运行更流畅
-- 网络：出站正常，可访问 GitHub 拉取源码
-- 系统：纯净原生系统，无环境冲突、无其他面板占用端口
 
 一键部署命令
-- bash -c "$(curl -fsSL https://raw.githubusercontent.com/HYT-1840/xboard-mini/main/install.sh)"
-- 执行后按照提示设置管理员用户名与密码，等待自动部署完成即可。
+- curl -fsSL https://raw.githubusercontent.com/HYT-1840/xboard-mini/main/install.sh -o install.sh && chmod +x install.sh && ./install.sh
+
 
 面板管理命令
 安装完成后，可使用以下命令管理面板服务：
