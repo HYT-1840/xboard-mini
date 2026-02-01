@@ -38,19 +38,19 @@ curl -fsSL https://raw.githubusercontent.com/HYT-1840/xboard-mini/main/install.s
 面板管理命令
 安装完成后，可使用以下命令管理面板服务：
 # 启动面板
-xboard-mini start
+- xboard-mini start
 
 # 停止面板
-xboard-mini stop
+- xboard-mini stop
 
 # 重启面板（修改配置、出现异常时使用）
-xboard-mini restart
+- xboard-mini restart
 
 # 查看服务运行状态
-xboard-mini status
+- xboard-mini status
 
 # 查看面板错误日志
-xboard-mini logs
+- xboard-mini logs
 
 访问地址
 - 默认访问端口：8080
@@ -65,7 +65,7 @@ xboard-mini logs
 
 数据备份
 - 仅需备份数据库文件即可完成全量数据备份：
-cp /opt/xboard-mini/database.db /root/backup.db
+- cp /opt/xboard-mini/database.db /root/backup.db
 
 常见错误与解决方案
 1. 安装时报：E: Unable to locate package phpxxx
@@ -80,33 +80,33 @@ cp /opt/xboard-mini/database.db /root/backup.db
 - 原因：Nginx 无法连接 PHP-FPM，进程未启动、Socket 路径错误、权限异常。
 - 解决：
 # 重启PHP与Nginx服务
-xboard-mini restart
+- xboard-mini restart
 
 # 修复文件权限
-chown -R www-data:www-data /opt/xboard-mini
-chmod -R 755 /opt/xboard-mini
+- chown -R www-data:www-data /opt/xboard-mini
+- chmod -R 755 /opt/xboard-mini
 
 4. 访问出现 ERR_EMPTY_RESPONSE 空白响应
 - 原因：PHP 无执行权限、源码文件缺失、内存不足导致进程崩溃、扩展未安装完整。
 - 解决：
 # 重新拉取完整源码
-curl -fsSL https://raw.githubusercontent.com/HYT-1840/xboard-mini/main/install.sh | bash
+- curl -fsSL https://raw.githubusercontent.com/HYT-1840/xboard-mini/main/install.sh | bash
 
 # 重新安装PHP依赖扩展
-apt install -y --reinstall php-fpm php-sqlite3 php-curl php-mbstring
+- apt install -y --reinstall php-fpm php-sqlite3 php-curl php-mbstring
 
 5. 浏览器无法访问，提示连接超时
 - 原因：服务器防火墙未放行 8080 端口、安全组未放行、Nginx 未正常启动。
 - 解决：
 # 放行防火墙端口
-ufw allow 8080/tcp
-ufw reload
+- ufw allow 8080/tcp
+- ufw reload
 
 # 检查端口占用
-netstat -tulpn | grep 8080
+- netstat -tulpn | grep 8080
 
 # 重启Nginx
-systemctl restart nginx
+- systemctl restart nginx
 
 6. ARM 架构服务器安装失败
 - 原因：旧脚本未适配 ARM，当前版本原生支持 ARM64，无额外修改。
@@ -115,8 +115,8 @@ systemctl restart nginx
 7. PHP-FPM 进程频繁崩溃
 - 原因：服务器内存不足，进程参数过高。
 - 解决：脚本已自动根据内存配置参数，1 核 1G 服务器建议升级至 1 核 2G，或执行优化：
-echo 1 > /proc/sys/vm/drop_caches
-xboard-mini restart
+- echo 1 > /proc/sys/vm/drop_caches
+- xboard-mini restart
 
 多系统适配说明
 - Ubuntu 系列
@@ -133,20 +133,20 @@ xboard-mini restart
 
 更新与重装
 - 如需更新面板或重新部署，直接执行一键安装命令即可，脚本会保留原有数据库，不会丢失数据：
-curl -fsSL https://raw.githubusercontent.com/HYT-1840/xboard-mini/main/install.sh | bash
+- curl -fsSL https://raw.githubusercontent.com/HYT-1840/xboard-mini/main/install.sh | bash
 
 卸载面板
 - 如需完全卸载面板及相关配置，执行以下命令：
 # 停止服务
-xboard-mini stop
+- xboard-mini stop
 
 # 删除安装目录与配置文件
-rm -rf /opt/xboard-mini
-rm -rf /etc/nginx/sites-enabled/xboard-mini.conf
-rm -rf /usr/local/bin/xboard-mini
+- rm -rf /opt/xboard-mini
+- rm -rf /etc/nginx/sites-enabled/xboard-mini.conf
+- rm -rf /usr/local/bin/xboard-mini
 
 # 重启Nginx
-systemctl restart nginx
+- systemctl restart nginx
 
 # 注意事项
 - 请勿在安装了宝塔、1Panel 等其他面板的服务器上部署，避免端口、环境冲突
