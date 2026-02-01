@@ -13,10 +13,12 @@ if (isset($_GET['action']) && $_GET['action'] === 'logout') {
     exit;
 }
 
-// 修正：数据库路径 ../database.db（public/user.php → 上级INSTALL_DIR）
+// 修正1：表名从user改为users（匹配数据库实际表名）
+// 修正2：数据库路径保持原有配置，开启外键约束
 $db = new SQLite3('../database.db');
-// 查询所有用户数据（示例，可根据实际user表结构调整字段）
-$users = $db->query("SELECT * FROM user ORDER BY id DESC");
+$db->exec("PRAGMA foreign_keys = ON;");
+// 查询所有用户数据（字段完全匹配users表结构）
+$users = $db->query("SELECT * FROM users ORDER BY id DESC");
 ?>
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -257,6 +259,27 @@ $users = $db->query("SELECT * FROM user ORDER BY id DESC");
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        /* 流量进度条样式 */
+        .traffic-progress {
+            width: 100%;
+            height: 6px;
+            background: var(--secondary);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 4px;
+        }
+        .traffic-bar {
+            height: 100%;
+            background: var(--primary);
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
+        .traffic-bar.warning {
+            background: var(--warning);
+        }
+        .traffic-bar.danger {
+            background: var(--danger);
+        }
         @media (max-width: 768px) {
             .main {
                 padding: 80px 15px 40px;
@@ -325,10 +348,12 @@ $users = $db->query("SELECT * FROM user ORDER BY id DESC");
                 <table class="data-table">
                     <thead>
                         <tr>
+                            <!-- 修正2：表头替换为users表实际字段，新增流量相关列 -->
                             <th>ID</th>
                             <th>用户名</th>
-                            <th>邮箱</th>
-                            <th>过期时间</th>
+                            <th>流量配额(GB)</th>
+                            <th>已用流量(GB)</th>
+                            <th>剩余流量(GB)</th>
                             <th>状态</th>
                             <th>创建时间</th>
                             <th>操作</th>
@@ -337,19 +362,30 @@ $users = $db->query("SELECT * FROM user ORDER BY id DESC");
                     <tbody>
                         <?php if ($users && $users->numRows() > 0): ?>
                             <?php while ($user = $users->fetchArray(SQLITE3_ASSOC)): ?>
+                                <?php
+                                // 计算剩余流量和使用率（贴合流量配额管理核心功能）
+                                $quota = $user['traffic_quota'] ?? 0;
+                                $used = $user['traffic_used'] ?? 0;
+                                $left = max(0, $quota - $used);
+                                $usageRate = $quota > 0 ? round(($used / $quota) * 100, 2) : 0;
+                                // 流量进度条颜色判断
+                                $barClass = '';
+                                if ($usageRate >= 90) $barClass = 'danger';
+                                elseif ($usageRate >= 70) $barClass = 'warning';
+                                ?>
                                 <tr>
                                     <td><?php echo $user['id']; ?></td>
                                     <td><?php echo htmlspecialchars($user['username'] ?? '未知用户'); ?></td>
-                                    <td class="text-ellipsis" title="<?php echo htmlspecialchars($user['email'] ?? '无'); ?>">
-                                        <?php echo htmlspecialchars($user['email'] ?? '无'); ?>
-                                    </td>
+                                    <td><?php echo $quota; ?></td>
                                     <td>
-                                        <?php $expire = $user['expire_time'] ?? ''; ?>
-                                        <?php if (empty($expire) || $expire == '永久'): ?>
-                                            <span class="text-success"><i class="fas fa-infinity"></i> 永久</span>
-                                        <?php else: ?>
-                                            <?php echo date('Y-m-d', strtotime($expire)); ?>
-                                        <?php endif; ?>
+                                        <?php echo $used; ?>
+                                        <div class="traffic-progress">
+                                            <div class="traffic-bar <?php echo $barClass; ?>" style="width: <?php echo $usageRate; ?>%"></div>
+                                        </div>
+                                        <small class="text-muted"><?php echo $usageRate; ?>%</small>
+                                    </td>
+                                    <td class="<?php echo $left <= 0 ? 'text-danger' : ''; ?>">
+                                        <?php echo $left; ?>
                                     </td>
                                     <td>
                                         <?php $status = $user['status'] ?? 0; ?>
@@ -357,8 +393,9 @@ $users = $db->query("SELECT * FROM user ORDER BY id DESC");
                                             <?php echo $status ? '<i class="fas fa-check"></i> 启用' : '<i class="fas fa-pause"></i> 禁用'; ?>
                                         </span>
                                     </td>
+                                    <!-- 修正3：创建时间字段从create_time改为created_at（匹配数据库） -->
                                     <td class="text-muted">
-                                        <?php echo date('Y-m-d', strtotime($user['create_time'] ?? '')); ?>
+                                        <?php echo !empty($user['created_at']) ? date('Y-m-d H:i', strtotime($user['created_at'])) : '未知'; ?>
                                     </td>
                                     <td>
                                         <a href="user_edit.php?id=<?php echo $user['id']; ?>" class="btn btn-sm btn-warning">
@@ -372,7 +409,8 @@ $users = $db->query("SELECT * FROM user ORDER BY id DESC");
                             <?php endwhile; ?>
                         <?php else: ?>
                             <tr>
-                                <td colspan="7" style="text-align: center; padding: 30px; color: var(--text-muted);">
+                                <!-- 修正4：无数据时列数匹配表头（8列） -->
+                                <td colspan="8" style="text-align: center; padding: 30px; color: var(--text-muted);">
                                     <i class="fas fa-user-slash"></i> 暂无用户数据，点击上方添加新用户
                                 </td>
                             </tr>
@@ -414,6 +452,7 @@ $users = $db->query("SELECT * FROM user ORDER BY id DESC");
                 targetBtn.appendChild(loading);
                 targetBtn.disabled = true;
                 
+                // 模拟删除请求，实际项目可替换为AJAX请求
                 setTimeout(() => {
                     alert(`用户${id}删除成功！`);
                     window.location.reload();
