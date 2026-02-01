@@ -2,7 +2,7 @@
 session_start();
 // 权限验证：未登录跳转到登录页
 if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    header('Location: /index.php');
+    header('Location: ../public/index.php');
     exit;
 }
 
@@ -26,7 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = '请输入有效的邮箱地址';
     } else {
         // 数据库连接并添加用户（示例，可根据实际表结构调整）
-        $db = new SQLite3('../../database.db');
+        $db = new SQLite3('../database.db');
         // 密码加密
         $pwd_hash = password_hash($password, PASSWORD_DEFAULT);
         // 默认过期时间（若未填写）
