@@ -324,11 +324,12 @@ get_admin_info() {
 
 # 源码拉取异常重试
 pull_source() {
+    curl -fsSL ${REPO_RAW_URL}/src/public/admin.php -o ${INSTALL_DIR}/public/admin.php || return 1
     curl -fsSL ${REPO_RAW_URL}/src/public/index.php -o ${INSTALL_DIR}/public/index.php || return 1
-    curl -fsSL ${REPO_RAW_URL}/src/pages/login.php -o ${INSTALL_DIR}/pages/login.php || return 1
-    curl -fsSL ${REPO_RAW_URL}/src/pages/admin.php -o ${INSTALL_DIR}/pages/admin.php || return 1
-    curl -fsSL ${REPO_RAW_URL}/src/pages/user.php -o ${INSTALL_DIR}/pages/user.php || return 1
-    curl -fsSL ${REPO_RAW_URL}/src/pages/node.php -o ${INSTALL_DIR}/pages/node.php || return 1
+    curl -fsSL ${REPO_RAW_URL}/src/public/node.php -o ${INSTALL_DIR}/public/node.php || return 1
+    curl -fsSL ${REPO_RAW_URL}/src/public/node_add.php -o ${INSTALL_DIR}/public/node_add.php || return 1
+    curl -fsSL ${REPO_RAW_URL}/src/public/user.php -o ${INSTALL_DIR}/public/user.php || return 1
+    curl -fsSL ${REPO_RAW_URL}/src/public/user_add.php -o ${INSTALL_DIR}/public/user_add.php || return 1
     curl -fsSL ${REPO_RAW_URL}/src/database.sql -o ${INSTALL_DIR}/database.sql || return 1
     return 0
 }
