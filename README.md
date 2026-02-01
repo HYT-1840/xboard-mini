@@ -11,7 +11,6 @@
 - 无冗余代码、无多余依赖，运行稳定无报错
 
 支持系统与架构
-- 已完美兼容系统
 - Ubuntu 20.04 / 22.04 / 24.04 (推荐)
 - Debian 11 (Bullseye) / 12 (Bookworm)
 - 支持所有基于 APT 包管理器的 Debian 系发行版
@@ -20,11 +19,6 @@
 - x86_64 (amd64)
 - ARM64 (aarch64)：甲骨文云、AWS Graviton、Azure ARM 等机型通用
 
-不支持系统
-- CentOS/RHEL/Rocky/AlmaLinux（RPM 系）
-- OpenWRT、FreeBSD 等非 Linux 系统
-- 内核版本过低、系统停止维护的老旧发行版
-
 服务器配置要求
 - 最低：1 核 1G 内存，10G 以上硬盘
 - 推荐：1 核 2G 及以上，运行更流畅
@@ -32,7 +26,7 @@
 - 系统：纯净原生系统，无环境冲突、无其他面板占用端口
 
 一键部署命令
-curl -fsSL https://raw.githubusercontent.com/HYT-1840/xboard-mini/main/install.sh | bash
+- bash -c "$(curl -fsSL https://raw.githubusercontent.com/HYT-1840/xboard-mini/main/install.sh)"
 - 执行后按照提示设置管理员用户名与密码，等待自动部署完成即可。
 
 面板管理命令
