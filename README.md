@@ -7,7 +7,6 @@
 - 开放8080端口
 
 ## 一键安装
-```bash
 curl -fsSL https://raw.githubusercontent.com/HYT-1840/xboard-mini/main/install.sh | bash
 
 ## 服务命令
