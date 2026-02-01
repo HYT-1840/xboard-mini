@@ -2,19 +2,19 @@
 session_start();
 // 未登录则跳转到登录页
 if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    header('Location: /index.php');
+    header('Location: ../public/index.php');
     exit;
 }
 
 // 处理退出登录
 if (isset($_GET['action']) && $_GET['action'] === 'logout') {
     session_destroy();
-    header('Location: /index.php');
+    header('Location: ../public/index.php');
     exit;
 }
 
 // 数据库查询统计数据
-$db = new SQLite3('../../database.db');
+$db = new SQLite3('../database.db');
 $node_count = $db->querySingle("SELECT COUNT(*) FROM node") ?: 0;
 $user_count = $db->querySingle("SELECT COUNT(*) FROM user") ?: 0;
 ?>
