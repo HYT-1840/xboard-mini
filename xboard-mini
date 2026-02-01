@@ -1,27 +1,37 @@
 #!/bin/bash
+# Xboard-Mini 服务控制脚本（适配PHP8.3，ARM/x86全兼容）
 INSTALL_DIR="/opt/xboard-mini"
-PHP_VERSION="8.1"
+PHP_VERSION="8.3"
 
+# 颜色输出
+green() { echo -e "\033[32m$1\033[0m"; }
+red() { echo -e "\033[31m$1\033[0m"; }
+blue() { echo -e "\033[36m$1\033[0m"; }
+
+# 服务控制逻辑
 case "$1" in
     start)
         systemctl start nginx php${PHP_VERSION}-fpm
-        echo "Xboard-mini 已启动"
+        green "✅ Xboard-mini 服务已成功启动"
         ;;
     stop)
         systemctl stop nginx php${PHP_VERSION}-fpm
-        echo "已停止"
+        red "❌ Xboard-mini 服务已成功停止"
         ;;
     restart)
         systemctl restart nginx php${PHP_VERSION}-fpm
-        echo "已重启"
+        blue "🔄 Xboard-mini 服务已成功重启"
         ;;
     status)
+        blue "📊 Xboard-mini 服务运行状态："
         systemctl status nginx php${PHP_VERSION}-fpm --no-pager
         ;;
     logs)
+        blue "📋 Xboard-mini 最近30条错误日志："
         tail -n 30 /var/log/nginx/xboard-mini-error.log
         ;;
     *)
-        echo "用法：xboard-mini start|stop|restart|status|logs"
+        echo "📚 用法：xboard-mini start|stop|restart|status|logs"
+        echo "💡 示例：xboard-mini restart （重启面板服务，解决内存占用过高）"
         ;;
 esac
