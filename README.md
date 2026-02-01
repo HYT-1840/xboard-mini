@@ -9,3 +9,16 @@
 ## 一键安装
 ```bash
 curl -fsSL https://raw.githubusercontent.com/HYT-1840/xboard-mini/main/install.sh | bash
+
+## 服务命令
+xboard-mini start
+xboard-mini stop
+xboard-mini restart
+xboard-mini status
+xboard-mini logs
+
+## 功能说明
+单管理员账户
+多节点增删改查、启用 / 禁用
+用户管理、流量配额分配 / 重置
+SQLite 单文件数据库，备份迁移简单
