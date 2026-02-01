@@ -8,4 +8,4 @@
 
 ## 一键安装
 ```bash
-curl -fsSL https://raw.githubusercontent.com/你的GitHub用户名/xboard-mini/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/HYT-1840/xboard-mini/main/install.sh | bash
