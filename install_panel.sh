@@ -14,25 +14,25 @@ fi
 
 echo -e "\033[32m=== 面板配置信息（回车使用默认值）===\033[0m"
 
-# 1. 面板域名/IP
+# 1. 面板域名/IP（默认自动获取公网IP）
 read -p "面板域名/公网IP (默认: 本机公网IP自动获取): " PANEL_DOMAIN
 if [ -z "${PANEL_DOMAIN}" ]; then
     PANEL_DOMAIN=$(curl -s ip.sb || echo "127.0.0.1")
     echo -e "\033[32m使用默认IP: ${PANEL_DOMAIN}\033[0m"
 fi
 
-# 2. MySQL root 密码
+# 2. MySQL root 密码（默认16位随机）
 read -p "MySQL root 密码 (默认: 随机16位): " MYSQL_ROOT_PWD
 if [ -z "${MYSQL_ROOT_PWD}" ]; then
     MYSQL_ROOT_PWD=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 16)
     echo -e "\033[32m使用随机root密码: ${MYSQL_ROOT_PWD}\033[0m"
 fi
 
-# 3. 数据库名
+# 3. 数据库名（默认xboard_mini）
 read -p "数据库名 (默认: xboard_mini): " DB_NAME
 DB_NAME=${DB_NAME:-xboard_mini}
 
-# 4. 数据库用户
+# 4. 数据库用户（默认xboard_user）
 read -p "数据库用户 (默认: xboard_user): " DB_USER
 DB_USER=${DB_USER:-xboard_user}
 
@@ -41,7 +41,6 @@ RANDOM_DB_PASS=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 16)
 echo -e "\033[33m随机数据库用户密码: ${RANDOM_DB_PASS}\033[0m"
 read -p "是否使用该随机密码? [y/n] (默认y): " USE_RANDOM
 USE_RANDOM=${USE_RANDOM:-y}
-
 if [[ "${USE_RANDOM}" == "y" || "${USE_RANDOM}" == "Y" ]]; then
     DB_PASS=${RANDOM_DB_PASS}
     echo -e "\033[32m已使用随机数据库密码\033[0m"
@@ -53,28 +52,22 @@ else
     fi
 fi
 
-# 6. 网站根目录
+# 6. 网站根目录（默认/var/www/xboard-mini）
 read -p "网站根目录 (默认: /var/www/xboard-mini): " WEB_ROOT
 WEB_ROOT=${WEB_ROOT:-/var/www/xboard-mini}
 
-# 7. 管理员账号
+# 7. 管理员账号（默认admin）
 read -p "管理员账号 (默认: admin): " ADMIN_USER
 ADMIN_USER=${ADMIN_USER:-admin}
 
-# 8. 管理员密码
+# 8. 管理员密码（默认16位随机，仅记录明文，不提前生成哈希）
 read -p "管理员密码 (默认: 随机16位): " ADMIN_PASS
 if [ -z "${ADMIN_PASS}" ]; then
     ADMIN_PASS=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 16)
     echo -e "\033[32m使用随机管理员密码: ${ADMIN_PASS}\033[0m"
 fi
 
-# 生成密码哈希
-ADMIN_PASS_HASH=$(php -r "echo password_hash('${ADMIN_PASS}', PASSWORD_DEFAULT);" 2>/dev/null)
-if [ -z "${ADMIN_PASS_HASH}" ]; then
-    echo -e "\033[31m密码哈希生成失败，请检查PHP环境\033[0m"
-    exit 1
-fi
-
+# -------------------------- 环境安装阶段 --------------------------
 echo -e "\033[32m[1/7] 系统更新与基础工具安装\033[0m"
 if [ -f /etc/debian_version ]; then
     export DEBIAN_FRONTEND=noninteractive
@@ -107,6 +100,13 @@ else
 fi
 systemctl enable --now php7.4-fpm 2>/dev/null || systemctl enable --now php-fpm
 
+# ✅ 关键修复：PHP安装完成后，再生成管理员密码哈希（此时php命令可正常执行）
+ADMIN_PASS_HASH=$(php -r "echo password_hash('${ADMIN_PASS}', PASSWORD_DEFAULT);" 2>/dev/null)
+if [ -z "${ADMIN_PASS_HASH}" ]; then
+    echo -e "\033[31m密码哈希生成失败，PHP环境异常！\033[0m"
+    exit 1
+fi
+
 echo -e "\033[32m[4/7] 安装 MariaDB 数据库\033[0m"
 if [ -f /etc/debian_version ]; then
     apt install -y mariadb-server mariadb-client
@@ -115,6 +115,7 @@ else
 fi
 systemctl enable --now mariadb
 
+# -------------------------- 数据库与配置阶段 --------------------------
 echo -e "\033[32m[5/7] 数据库初始化与权限配置\033[0m"
 mysql -uroot <<EOF
 SET PASSWORD FOR 'root'@'localhost' = PASSWORD('${MYSQL_ROOT_PWD}');
@@ -135,6 +136,7 @@ mkdir -p ${WEB_ROOT}
 git clone https://github.com/HYT-1840/xboard-mini.git ${WEB_ROOT}
 chown -R www-data:www-data ${WEB_ROOT} 2>/dev/null || chown -R nginx:nginx ${WEB_ROOT}
 
+# 生成项目配置文件
 cat >${WEB_ROOT}/config.php <<EOF
 <?php
 session_start();
@@ -161,6 +163,7 @@ function getDB() {
 EOF
 
 echo -e "\033[32m[7/7] 建表、初始化管理员、配置Nginx\033[0m"
+# 建表并插入管理员账号（使用已生成的哈希密码）
 mysql -u${DB_USER} -p${DB_PASS} ${DB_NAME} <<EOF
 DROP TABLE IF EXISTS users;
 CREATE TABLE users (
@@ -189,6 +192,7 @@ REPLACE INTO users (username, password, role)
 VALUES ('${ADMIN_USER}', '${ADMIN_PASS_HASH}', 'admin');
 EOF
 
+# Nginx站点配置（适配Debian/Ubuntu/CentOS）
 cat >/etc/nginx/sites-available/xboard.conf 2>/dev/null || cat >/etc/nginx/conf.d/xboard.conf <<EOF
 server {
     listen 80;
@@ -212,25 +216,29 @@ server {
 }
 EOF
 
+# 启用Nginx站点（仅Debian/Ubuntu）
 if [ -f /etc/debian_version ]; then
     ln -sf /etc/nginx/sites-available/xboard.conf /etc/nginx/sites-enabled/
     rm -f /etc/nginx/sites-enabled/default
 fi
 
+# 防火墙放行80/443端口
 echo -e "\033[32m放行 80/443 端口\033[0m"
 if [ -f /etc/debian_version ]; then
-    ufw allow 80/tcp
-    ufw allow 443/tcp
+    ufw allow 80/tcp >/dev/null 2>&1
+    ufw allow 443/tcp >/dev/null 2>&1
 else
-    firewall-cmd --permanent --add-port=80/tcp
-    firewall-cmd --permanent --add-port=443/tcp
-    firewall-cmd --reload
+    firewall-cmd --permanent --add-port=80/tcp >/dev/null 2>&1
+    firewall-cmd --permanent --add-port=443/tcp >/dev/null 2>&1
+    firewall-cmd --reload >/dev/null 2>&1
 fi
 
-systemctl restart nginx
-systemctl restart php7.4-fpm 2>/dev/null || systemctl restart php-fpm
-systemctl restart mariadb
+# 重启所有服务
+systemctl restart nginx >/dev/null 2>&1
+systemctl restart php7.4-fpm 2>/dev/null || systemctl restart php-fpm >/dev/null 2>&1
+systemctl restart mariadb >/dev/null 2>&1
 
+# 安装完成提示
 clear
 echo "========================================================"
 echo -e "\033[32m           安装全部完成，无任何后续操作！\033[0m"
