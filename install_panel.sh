@@ -4,6 +4,7 @@ clear
 echo "========================================================"
 echo "          Xboard-Mini 控制面板 - 全自动安装脚本"
 echo "          系统支持: Debian 9+/Ubuntu 18+/CentOS 7+"
+echo "          适配架构: x86_64 + arm64（甲骨文ARM）"
 echo "          项目地址: https://github.com/HYT-1840/xboard-mini"
 echo "========================================================"
 echo ""
@@ -14,15 +15,17 @@ if [ "$(id -u)" != "0" ]; then
     exit 1
 fi
 
-# -------------------------- 第一步：系统版本检测 + 原生源PHP最高版本自动探测（核心修正） --------------------------
-echo -e "\033[32m[前置检测] 检测系统发行版及原生源PHP可用版本...\033[0m"
+# -------------------------- 第一步：系统版本+架构检测 + 原生源PHP最高版本自动探测（核心修正） --------------------------
+echo -e "\033[32m[前置检测] 检测系统发行版、架构及原生源PHP可用版本...\033[0m"
 OS_TYPE=""
 OS_VERSION=""
+SYS_ARCH=$(dpkg --print-architecture)
 PHP_VERSION=""
 PHP_FPM_SERVICE=""
 PHP_FPM_SOCK=""
-# 定义PHP候选版本（从高到低，优先选最高），兼容面板所需的PHP7.2+
-PHP_CANDIDATES=("8.2" "8.1" "8.0" "7.4" "7.3" "7.2")
+# 定义PHP候选版本（从高到低，新增8.3适配甲骨文ARM64 ports源，兼容x86_64）
+# 顺序：8.3(ARM64 Ubuntu24) → 8.2(x86_64 Ubuntu24/Debian12) → 8.1 → 8.0 → 7.4 → 7.3 → 7.2
+PHP_CANDIDATES=("8.3" "8.2" "8.1" "8.0" "7.4" "7.3" "7.2")
 
 # 检测Debian/Ubuntu系统
 if [ -f /etc/debian_version ]; then
@@ -35,8 +38,8 @@ if [ -f /etc/debian_version ]; then
         OS_VERSION=$(cat /etc/debian_version | cut -d '.' -f1)
     fi
 
-    # ✅ 核心修正：强制更新apt缓存，确保读取原生源最新包信息（解决Ubuntu24探测为7.4的问题）
-    echo -e "\033[36m正在更新apt缓存，确保探测到原生源最新PHP版本...\033[0m"
+    # 强制更新apt缓存（同步ports源最新包信息，解决ARM架构探测错误）
+    echo -e "\033[36m正在更新apt缓存（适配${SYS_ARCH}架构），确保探测到原生源最新PHP版本...\033[0m"
     apt update -y >/dev/null 2>&1
 
     # 核心逻辑：从高到低探测原生源中存在的PHP最高版本
@@ -53,20 +56,21 @@ if [ -f /etc/debian_version ]; then
         exit 1
     fi
 
-    # 适配Debian/Ubuntu的PHP服务名和Sock路径
+    # 适配Debian/Ubuntu的PHP服务名和Sock路径（全版本通用）
     PHP_FPM_SERVICE="php${PHP_VERSION}-fpm"
     PHP_FPM_SOCK="/run/php/php${PHP_VERSION}-fpm.sock"
-    echo -e "\033[36m检测到 ${DISTRIB_ID:-Debian} ${OS_VERSION} 系统，原生源最高可用PHP：${PHP_VERSION}\033[0m"
+    echo -e "\033[36m检测到 ${DISTRIB_ID:-Debian} ${OS_VERSION} (${SYS_ARCH}) 系统，原生源最高可用PHP：${PHP_VERSION}\033[0m"
 
 # 检测CentOS7系统
 elif [ -f /etc/redhat-release ] && grep -q "CentOS Linux release 7" /etc/redhat-release; then
     OS_TYPE="CENTOS"
     OS_VERSION="7"
+    SYS_ARCH=$(uname -m)
     # CentOS7原生EPEL源最高稳定可用PHP为7.2，直接指定
     PHP_VERSION="7.2"
     PHP_FPM_SERVICE="php-fpm"
     PHP_FPM_SOCK="/var/run/php-fpm/php-fpm.sock"
-    echo -e "\033[36m检测到 CentOS 7 系统，原生EPEL源最高可用PHP：${PHP_VERSION}\033[0m"
+    echo -e "\033[36m检测到 CentOS 7 (${SYS_ARCH}) 系统，原生EPEL源最高可用PHP：${PHP_VERSION}\033[0m"
 
 # 不支持的系统
 else
@@ -130,7 +134,7 @@ if [ -z "${ADMIN_PASS}" ]; then
     echo -e "\033[32m使用随机管理员密码: ${ADMIN_PASS}\033[0m"
 fi
 
-# -------------------------- 第三步：环境安装阶段（纯原生源，无第三方） --------------------------
+# -------------------------- 第三步：环境安装阶段（纯原生源，无第三方，适配ARM64） --------------------------
 echo -e "\033[32m[1/6] 清理第三方PHP源 + 系统更新 + 基础工具安装\033[0m"
 if [ "${OS_TYPE}" = "DEBIAN" ]; then
     export DEBIAN_FRONTEND=noninteractive
@@ -149,7 +153,7 @@ elif [ "${OS_TYPE}" = "CENTOS" ]; then
     yum install -y curl wget git unzip
 fi
 
-echo -e "\033[32m[2/6] 安装 Nginx（系统原生源）\033[0m"
+echo -e "\033[32m[2/6] 安装 Nginx（系统原生源，适配${SYS_ARCH}架构）\033[0m"
 if [ "${OS_TYPE}" = "DEBIAN" ]; then
     apt install -y nginx
 else
@@ -157,9 +161,9 @@ else
 fi
 systemctl enable --now nginx >/dev/null 2>&1
 
-echo -e "\033[32m[3/6] 安装 PHP ${PHP_VERSION} 及必需扩展（原生源最高版本）\033[0m"
+echo -e "\033[32m[3/6] 安装 PHP ${PHP_VERSION} 及必需扩展（原生源最高版本，适配${SYS_ARCH}）\033[0m"
 if [ "${OS_TYPE}" = "DEBIAN" ]; then
-    # 安装探测到的PHP最高版本及扩展（原生源包，动态适配版本号）
+    # 安装探测到的PHP最高版本及扩展（原生源包，动态适配版本号+架构）
     apt install -y \
         php${PHP_VERSION}-fpm \
         php${PHP_VERSION}-mysql \
@@ -186,7 +190,7 @@ if [ -z "${ADMIN_PASS_HASH}" ]; then
     exit 1
 fi
 
-echo -e "\033[32m[4/6] 安装 MariaDB 数据库（系统原生源）\033[0m"
+echo -e "\033[32m[4/6] 安装 MariaDB 数据库（系统原生源，适配${SYS_ARCH}架构）\033[0m"
 if [ "${OS_TYPE}" = "DEBIAN" ]; then
     apt install -y mariadb-server mariadb-client
 else
@@ -323,7 +327,7 @@ clear
 echo "========================================================"
 echo -e "\033[32m           安装全部完成，纯系统原生源环境！\033[0m"
 echo "========================================================"
-echo "📌 系统环境：${DISTRIB_ID:-CentOS} ${OS_VERSION}"
+echo "📌 系统环境：${DISTRIB_ID:-CentOS} ${OS_VERSION} (${SYS_ARCH}架构)"
 echo "📌 运行环境：Nginx + 原生源最高可用PHP ${PHP_VERSION} + MariaDB"
 echo "🌐 面板访问地址：http://${PANEL_DOMAIN}"
 echo "🔑 管理员账号：${ADMIN_USER}"
@@ -337,5 +341,5 @@ echo "   库名：${DB_NAME}"
 echo "   账号：${DB_USER}"
 echo "   密码：${DB_PASS}"
 echo "========================================================"
-echo "💡 说明：全程使用系统原生源/EPEL源，自动适配最高可用PHP版本，无任何第三方依赖"
+echo "💡 说明：适配甲骨文ARM64/x86_64架构，全程系统原生源，无任何第三方依赖"
 echo "========================================================"
