@@ -1,62 +1,35 @@
 <?php
-session_start();
-// 权限验证：未登录跳转到登录页
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    header('Location: /index.php');
-    exit;
-}
+require_once 'config.php';
+checkAdmin();
 
-$success = '';
-$error = '';
-// 处理添加用户请求
+$msg = '';
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // 获取表单所有字段（保留原始表单的email/expire_time/remark，新增流量配额）
-    $username = trim($_POST['username'] ?? '');
-    $password = trim($_POST['password'] ?? '');
-    $email = trim($_POST['email'] ?? '');
-    $expire_time = trim($_POST['expire_time'] ?? '');
-    $remark = trim($_POST['remark'] ?? '');
-    $traffic_quota = intval($_POST['traffic_quota'] ?? 10); // 流量配额，默认10GB
+    $username = trim($_POST['username']);
+    $traffic_quota = (int)$_POST['traffic_quota'];
+    $status = (int)$_POST['status'];
 
-    // 表单验证（保留原始验证逻辑，新增流量配额非负验证）
-    if (empty($username) || empty($password)) {
-        $error = '用户名和密码不能为空';
-    } elseif (strlen($username) < 3 || strlen($username) > 20) {
-        $error = '用户名长度需在3-20位之间';
-    } elseif (strlen($password) < 6) {
-        $error = '密码长度不能少于6位';
-    } elseif (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $error = '请输入有效的邮箱地址';
+    if (empty($username)) {
+        $msg = '<span style="color: #dc2626;">用户名不能为空</span>';
     } elseif ($traffic_quota < 0) {
-        $error = '流量配额不能为负数';
+        $msg = '<span style="color: #dc2626;">流量配额不能为负数</span>';
     } else {
         try {
-            // 连接数据库（路径保持你的原始配置）
-            $db = new SQLite3('../database.db');
-            // 开启外键约束（与数据库脚本保持一致）
-            $db->exec("PRAGMA foreign_keys = ON;");
-            // 密码加密（保留原始加密方式）
-            $pwd_hash = password_hash($password, PASSWORD_DEFAULT);
-
-            // 核心修正1：表名改为数据库实际的`users`（复数）
-            // 核心修正2：字段完全匹配数据库`users`表结构，补充流量配额核心字段
-            $stmt = $db->prepare("INSERT INTO users (username, password, traffic_quota, traffic_used, status, created_at) 
-                                  VALUES (:username, :password, :traffic_quota, :traffic_used, :status, CURRENT_TIMESTAMP)");
-            $stmt->bindValue(':username', $username, SQLITE3_TEXT);
-            $stmt->bindValue(':password', $pwd_hash, SQLITE3_TEXT);
-            $stmt->bindValue(':traffic_quota', $traffic_quota, SQLITE3_INTEGER);
-            $stmt->bindValue(':traffic_used', 0, SQLITE3_INTEGER); // 已用流量默认0
-            $stmt->bindValue(':status', 1, SQLITE3_INTEGER); // 状态默认启用
-
-            if ($stmt->execute()) {
-                $success = '用户添加成功！3秒后将返回用户管理页';
-                echo '<script>setTimeout(() => { window.location.href = "user.php"; }, 3000);</script>';
+            $db = getDB();
+            // 检查用户名重复
+            $stmt = $db->prepare("SELECT id FROM users WHERE username = ?");
+            $stmt->execute([$username]);
+            if ($stmt->rowCount() > 0) {
+                $msg = '<span style="color: #dc2626;">用户名已存在</span>';
             } else {
-                // 精准提示：用户名唯一约束冲突
-                $error = '用户添加失败，用户名已存在（用户名唯一）';
+                $insert = $db->prepare("INSERT INTO users (username, traffic_quota, traffic_used, status) 
+                                        VALUES (?, ?, 0, ?)");
+                $insert->execute([$username, $traffic_quota, $status]);
+                $msg = '<span style="color: #10b981;">用户添加成功，3秒后跳转到用户列表</span>';
+                echo "<meta http-equiv='refresh' content='3;url=user.php'>";
             }
-        } catch (Exception $e) {
-            $error = '服务器内部错误：' . $e->getMessage();
+        } catch (PDOException $e) {
+            $msg = '<span style="color: #dc2626;">数据库错误：' . $e->getMessage() . '</span>';
         }
     }
 }
@@ -66,45 +39,158 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Xboard-Mini - 添加用户</title>
+    <title>添加用户 - Xboard-Mini</title>
     <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: "Microsoft YaHei", Arial, sans-serif;
-            transition: background 0.3s ease, border-color 0.3s ease, color 0.3s ease, transform 0.2s ease;
-        }
-        :root {
-            --body-bg: #f8fafc;
-            --header-bg: #ffffff;
-            --card-bg: #ffffff;
-            --form-input-bg: #ffffff;
-            --text-primary: #1e293b;
-            --text-secondary: #64748b;
-            --text-muted: #94a3b8;
-            --border-color: #e2e8f0;
-            --input-focus: #667eea;
-            --primary: #667eea;
-            --primary-hover: #556cd6;
-            --success: #10b981;
-            --success-hover: #059669;
-            --danger: #dc2626;
-            --danger-hover: #b91c1c;
-            --secondary: #f1f5f9;
-            --secondary-hover: #e2e8f0;
-            --success-bg: #f0fdf4;
-            --error-bg: #fef2f2;
-            --shadow: 0 2px 12px rgba(0,0,0,0.05);
-            --border-radius-sm: 6px;
-            --border-radius: 8px;
-            --border-radius-lg: 12px;
-        }
-        [data-theme="dark"] {
-            --body-bg: #0f172a;
-            --header-bg: #1e293b;
-            --card-bg: #1e293b;
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        font-family: "Microsoft Yahei", sans-serif;
+        transition: background 0.3s, border-color 0.3s, color 0.3s;
+    }
+
+    :root {
+        --body-bg: #f8fafc;
+        --card-bg: #fff;
+        --text-primary: #1e293b;
+        --text-secondary: #64748b;
+        --border-color: #e2e8f0;
+        --primary: #64748b;
+        --secondary: #f1f5f9;
+        --border-radius: 8px;
+        --shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+    }
+
+    [data-theme="dark"] {
+        --body-bg: #0f172a;
+        --card-bg: #1e293b;
+        --text-primary: #f1f5f9;
+        --text-secondary: #cbd5e1;
+        --border-color: #334155;
+        --primary: #4f46e5;
+        --secondary: #334155;
+    }
+
+    body {
+        background: var(--body-bg);
+        color: var(--text-primary);
+        padding: 20px;
+    }
+
+    .container {
+        max-width: 600px;
+        margin: 60px auto;
+        background: var(--card-bg);
+        padding: 30px;
+        border-radius: 12px;
+        box-shadow: var(--shadow);
+    }
+
+    h2 {
+        margin-bottom: 24px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 20px;
+    }
+
+    .form-group {
+        margin-bottom: 18px;
+    }
+
+    label {
+        display: block;
+        margin-bottom: 6px;
+        font-weight: 500;
+        color: var(--text-secondary);
+    }
+
+    input,
+    select {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid var(--border-color);
+        border-radius: var(--border-radius);
+        background: var(--secondary);
+        color: var(--text-primary);
+        font-size: 14px;
+        outline: none;
+    }
+
+    input:focus,
+    select:focus {
+        border-color: var(--primary);
+    }
+
+    .btn-submit {
+        width: 100%;
+        padding: 10px;
+        background: var(--primary);
+        color: #fff;
+        border: none;
+        border-radius: var(--border-radius);
+        font-size: 15px;
+        cursor: pointer;
+    }
+
+    .btn-submit:hover {
+        opacity: 0.9;
+    }
+
+    .msg {
+        padding: 10px 12px;
+        border-radius: var(--border-radius);
+        margin-bottom: 16px;
+        font-size: 14px;
+    }
+
+    .back-link {
+        display: inline-block;
+        margin-top: 16px;
+        color: var(--primary);
+        text-decoration: none;
+    }
+
+    .back-link:hover {
+        text-decoration: underline;
+    }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2><i class="fas fa-user-plus"></i> 添加新用户</h2>
+
+    <?php if ($msg): ?>
+        <div class="msg"><?= $msg ?></div>
+    <?php endif; ?>
+
+    <form method="post" autocomplete="off">
+        <div class="form-group">
+            <label>用户名</label>
+            <input type="text" name="username" required placeholder="请输入唯一用户名">
+        </div>
+
+        <div class="form-group">
+            <label>流量配额（MB）</label>
+            <input type="number" name="traffic_quota" min="0" value="1024" required placeholder="单位：MB">
+        </div>
+
+        <div class="form-group">
+            <label>用户状态</label>
+            <select name="status">
+                <option value="1">启用</option>
+                <option value="0">禁用</option>
+            </select>
+        </div>
+
+        <button type="submit" class="btn-submit">创建用户</button>
+    </form>
+
+    <a href="user.php" class="back-link"><i class="fas fa-arrow-left"></i> 返回用户列表</a>
+</div>
+</body>
+</html>            --card-bg: #1e293b;
             --form-input-bg: #1e293b;
             --text-primary: #f1f5f9;
             --text-secondary: #cbd5e1;
