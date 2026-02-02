@@ -7,6 +7,7 @@ echo "          项目地址: https://github.com/HYT-1840/xboard-mini"
 echo "========================================================"
 echo ""
 
+# 检查是否为root用户
 if [ "$(id -u)" != "0" ]; then
     echo -e "\033[31m错误：必须使用 root 用户运行！\033[0m"
     exit 1
@@ -60,7 +61,7 @@ WEB_ROOT=${WEB_ROOT:-/var/www/xboard-mini}
 read -p "管理员账号 (默认: admin): " ADMIN_USER
 ADMIN_USER=${ADMIN_USER:-admin}
 
-# 8. 管理员密码（默认16位随机，仅记录明文，不提前生成哈希）
+# 8. 管理员密码（默认16位随机，仅记录明文）
 read -p "管理员密码 (默认: 随机16位): " ADMIN_PASS
 if [ -z "${ADMIN_PASS}" ]; then
     ADMIN_PASS=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 16)
@@ -71,9 +72,11 @@ fi
 echo -e "\033[32m[1/7] 系统更新与基础工具安装\033[0m"
 if [ -f /etc/debian_version ]; then
     export DEBIAN_FRONTEND=noninteractive
+    # Debian/Ubuntu 基础工具 + HTTPS源支持
     apt update -y
-    apt install -y curl wget git unzip gnupg2 ca-certificates lsb-release
+    apt install -y curl wget git unzip gnupg2 ca-certificates lsb-release apt-transport-https
 elif [ -f /etc/redhat-release ]; then
+    # CentOS 基础工具 + EPEL源
     yum install -y epel-release
     yum update -y
     yum install -y curl wget git unzip
@@ -88,22 +91,38 @@ if [ -f /etc/debian_version ]; then
 else
     yum install -y nginx
 fi
-systemctl enable --now nginx
+systemctl enable --now nginx >/dev/null 2>&1
 
-echo -e "\033[32m[3/7] 安装 PHP 7.4 及必需扩展\033[0m"
+echo -e "\033[32m[3/7] 安装 PHP 7.4 及必需扩展（自动适配官方源）\033[0m"
 if [ -f /etc/debian_version ]; then
+    # ✅ Debian/Ubuntu 自动使用 PHP 官方源（Ondřej Surý PPA，PHP官方维护）
+    echo -e "\033[36m检测到Debian/Ubuntu系统，添加PHP 7.4官方PPA源...\033[0m"
+    # 导入官方源公钥（签名验证）
+    curl -sSL https://packages.sury.org/php/apt.gpg | gpg --dearmor -o /usr/share/keyrings/php-sury.gpg
+    # 添加官方源配置
+    echo "deb [signed-by=/usr/share/keyrings/php-sury.gpg] https://packages.sury.org/php/ $(lsb_release -sc) main" > /etc/apt/sources.list.d/php-sury.list
+    apt update -y
+    # 安装PHP 7.4及必需扩展（官方源包）
     apt install -y php7.4-fpm php7.4-mysql php7.4-curl php7.4-mbstring php7.4-xml
-else
+    # 启动并自启PHP 7.4-FPM（Debian/Ubuntu专属服务名）
+    systemctl enable --now php7.4-fpm >/dev/null 2>&1
+elif [ -f /etc/redhat-release ]; then
+    # ✅ CentOS 自动使用 PHP 官方源（Remi源，PHP官方推荐的RHEL系源）
+    echo -e "\033[36m检测到CentOS系统，添加PHP 7.4官方Remi源...\033[0m"
+    # 安装Remi官方源
     yum install -y https://rpms.remirepo.net/enterprise/remi-release-7.rpm
+    # 启用PHP 7.4官方仓库
     yum-config-manager --enable remi-php74
+    # 安装PHP 7.4及必需扩展（官方源包）
     yum install -y php php-fpm php-mysqlnd php-curl php-mbstring php-xml
+    # 启动并自启PHP-FPM（CentOS专属服务名）
+    systemctl enable --now php-fpm >/dev/null 2>&1
 fi
-systemctl enable --now php7.4-fpm 2>/dev/null || systemctl enable --now php-fpm
 
-# ✅ 关键修复：PHP安装完成后，再生成管理员密码哈希（此时php命令可正常执行）
+# 密码哈希生成（PHP环境已通过官方源确保就绪）
 ADMIN_PASS_HASH=$(php -r "echo password_hash('${ADMIN_PASS}', PASSWORD_DEFAULT);" 2>/dev/null)
 if [ -z "${ADMIN_PASS_HASH}" ]; then
-    echo -e "\033[31m密码哈希生成失败，PHP环境异常！\033[0m"
+    echo -e "\033[31m密码哈希生成失败，PHP官方源安装异常！\033[0m"
     exit 1
 fi
 
@@ -113,7 +132,7 @@ if [ -f /etc/debian_version ]; then
 else
     yum install -y mariadb-server
 fi
-systemctl enable --now mariadb
+systemctl enable --now mariadb >/dev/null 2>&1
 
 # -------------------------- 数据库与配置阶段 --------------------------
 echo -e "\033[32m[5/7] 数据库初始化与权限配置\033[0m"
@@ -133,7 +152,7 @@ EOF
 
 echo -e "\033[32m[6/7] 拉取项目源码并生成配置\033[0m"
 mkdir -p ${WEB_ROOT}
-git clone https://github.com/HYT-1840/xboard-mini.git ${WEB_ROOT}
+git clone https://github.com/HYT-1840/xboard-mini.git ${WEB_ROOT} >/dev/null 2>&1
 chown -R www-data:www-data ${WEB_ROOT} 2>/dev/null || chown -R nginx:nginx ${WEB_ROOT}
 
 # 生成项目配置文件
@@ -163,7 +182,7 @@ function getDB() {
 EOF
 
 echo -e "\033[32m[7/7] 建表、初始化管理员、配置Nginx\033[0m"
-# 建表并插入管理员账号（使用已生成的哈希密码）
+# 建表并插入管理员账号（哈希密码）
 mysql -u${DB_USER} -p${DB_PASS} ${DB_NAME} <<EOF
 DROP TABLE IF EXISTS users;
 CREATE TABLE users (
