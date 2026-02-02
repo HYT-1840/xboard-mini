@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 clear
 echo "========================================================"
 echo "          Xboard-Mini 控制面板 - 全自动安装脚本"
@@ -13,6 +14,43 @@ if [ "$(id -u)" != "0" ]; then
     exit 1
 fi
 
+# -------------------------- 第一步：系统版本检测（核心） --------------------------
+echo -e "\033[32m[前置检测] 检测系统发行版及版本...\033[0m"
+OS_TYPE=""
+OS_VERSION=""
+PHP_VERSION=""
+PHP_FPM_SERVICE=""
+# 检测Debian/Ubuntu
+if [ -f /etc/debian_version ]; then
+    OS_TYPE="DEBIAN"
+    # 获取Ubuntu版本（如18.04/20.04）或Debian主版本（如9/10）
+    if [ -f /etc/lsb-release ]; then
+        . /etc/lsb-release
+        OS_VERSION=${DISTRIB_RELEASE%.*} # 取主版本：18/20/22
+    else
+        OS_VERSION=$(cat /etc/debian_version | cut -d '.' -f1) # Debian9/10
+    fi
+    # Debian9+/Ubuntu18+ 原生源默认PHP7.4（无则降级7.3，均为系统原生）
+    if apt-cache show php7.4-fpm >/dev/null 2>&1; then
+        PHP_VERSION="7.4"
+    else
+        PHP_VERSION="7.3"
+    fi
+    PHP_FPM_SERVICE="php${PHP_VERSION}-fpm"
+    echo -e "\033[36m检测到 ${DISTRIB_ID:-Debian} ${OS_VERSION} 系统，选用原生源PHP ${PHP_VERSION}\033[0m"
+# 检测CentOS7
+elif [ -f /etc/redhat-release ] && grep -q "CentOS Linux release 7" /etc/redhat-release; then
+    OS_TYPE="CENTOS"
+    OS_VERSION="7"
+    PHP_VERSION="7.2" # CentOS7 原生EPEL源默认PHP7.2，无第三方依赖
+    PHP_FPM_SERVICE="php-fpm"
+    echo -e "\033[36m检测到 CentOS 7 系统，选用原生EPEL源PHP 7.2\033[0m"
+else
+    echo -e "\033[31m不支持当前操作系统！仅支持Debian9+/Ubuntu18+/CentOS7+\033[0m"
+    exit 1
+fi
+
+# -------------------------- 第二步：面板配置交互（保留所有原有逻辑） --------------------------
 echo -e "\033[32m=== 面板配置信息（回车使用默认值）===\033[0m"
 
 # 1. 面板域名/IP（默认自动获取公网IP）
@@ -68,74 +106,67 @@ if [ -z "${ADMIN_PASS}" ]; then
     echo -e "\033[32m使用随机管理员密码: ${ADMIN_PASS}\033[0m"
 fi
 
-# -------------------------- 环境安装阶段 --------------------------
-echo -e "\033[32m[1/7] 系统更新与基础工具安装\033[0m"
-if [ -f /etc/debian_version ]; then
+# -------------------------- 第三步：环境安装阶段（系统原生源） --------------------------
+echo -e "\033[32m[1/6] 系统更新与基础工具安装\033[0m"
+if [ "${OS_TYPE}" = "DEBIAN" ]; then
     export DEBIAN_FRONTEND=noninteractive
-    # Debian/Ubuntu 基础工具 + HTTPS源支持
+    # Debian/Ubuntu 原生源 + HTTPS支持
     apt update -y
-    apt install -y curl wget git unzip gnupg2 ca-certificates lsb-release apt-transport-https
-elif [ -f /etc/redhat-release ]; then
-    # CentOS 基础工具 + EPEL源
+    apt install -y curl wget git unzip ca-certificates apt-transport-https
+elif [ "${OS_TYPE}" = "CENTOS" ]; then
+    # CentOS7 原生EPEL源（基础工具依赖）
     yum install -y epel-release
     yum update -y
     yum install -y curl wget git unzip
-else
-    echo -e "\033[31m不支持当前操作系统\033[0m"
-    exit 1
 fi
 
-echo -e "\033[32m[2/7] 安装 Nginx\033[0m"
-if [ -f /etc/debian_version ]; then
+echo -e "\033[32m[2/6] 安装 Nginx（系统原生源）\033[0m"
+if [ "${OS_TYPE}" = "DEBIAN" ]; then
     apt install -y nginx
 else
     yum install -y nginx
 fi
 systemctl enable --now nginx >/dev/null 2>&1
 
-echo -e "\033[32m[3/7] 安装 PHP 7.4 及必需扩展（自动适配官方源）\033[0m"
-if [ -f /etc/debian_version ]; then
-    # ✅ Debian/Ubuntu 自动使用 PHP 官方源（Ondřej Surý PPA，PHP官方维护）
-    echo -e "\033[36m检测到Debian/Ubuntu系统，添加PHP 7.4官方PPA源...\033[0m"
-    # 导入官方源公钥（签名验证）
-    curl -sSL https://packages.sury.org/php/apt.gpg | gpg --dearmor -o /usr/share/keyrings/php-sury.gpg
-    # 添加官方源配置
-    echo "deb [signed-by=/usr/share/keyrings/php-sury.gpg] https://packages.sury.org/php/ $(lsb_release -sc) main" > /etc/apt/sources.list.d/php-sury.list
-    apt update -y
-    # 安装PHP 7.4及必需扩展（官方源包）
-    apt install -y php7.4-fpm php7.4-mysql php7.4-curl php7.4-mbstring php7.4-xml
-    # 启动并自启PHP 7.4-FPM（Debian/Ubuntu专属服务名）
-    systemctl enable --now php7.4-fpm >/dev/null 2>&1
-elif [ -f /etc/redhat-release ]; then
-    # ✅ CentOS 自动使用 PHP 官方源（Remi源，PHP官方推荐的RHEL系源）
-    echo -e "\033[36m检测到CentOS系统，添加PHP 7.4官方Remi源...\033[0m"
-    # 安装Remi官方源
-    yum install -y https://rpms.remirepo.net/enterprise/remi-release-7.rpm
-    # 启用PHP 7.4官方仓库
-    yum-config-manager --enable remi-php74
-    # 安装PHP 7.4及必需扩展（官方源包）
-    yum install -y php php-fpm php-mysqlnd php-curl php-mbstring php-xml
-    # 启动并自启PHP-FPM（CentOS专属服务名）
-    systemctl enable --now php-fpm >/dev/null 2>&1
+echo -e "\033[32m[3/6] 安装 PHP ${PHP_VERSION} 及必需扩展（系统原生源）\033[0m"
+if [ "${OS_TYPE}" = "DEBIAN" ]; then
+    # Debian/Ubuntu 原生源PHP扩展（匹配检测到的版本）
+    apt install -y \
+        php${PHP_VERSION}-fpm \
+        php${PHP_VERSION}-mysql \
+        php${PHP_VERSION}-curl \
+        php${PHP_VERSION}-mbstring \
+        php${PHP_VERSION}-xml
+elif [ "${OS_TYPE}" = "CENTOS" ]; then
+    # CentOS7 原生EPEL源PHP7.2及扩展（原生包名）
+    yum install -y \
+        php \
+        php-fpm \
+        php-mysqlnd \
+        php-curl \
+        php-mbstring \
+        php-xml
 fi
+# 启动PHP-FPM（适配检测到的服务名）
+systemctl enable --now ${PHP_FPM_SERVICE} >/dev/null 2>&1
 
-# 密码哈希生成（PHP环境已通过官方源确保就绪）
+# 密码哈希生成（PHP原生环境已就绪）
 ADMIN_PASS_HASH=$(php -r "echo password_hash('${ADMIN_PASS}', PASSWORD_DEFAULT);" 2>/dev/null)
 if [ -z "${ADMIN_PASS_HASH}" ]; then
-    echo -e "\033[31m密码哈希生成失败，PHP官方源安装异常！\033[0m"
+    echo -e "\033[31m密码哈希生成失败，系统原生PHP环境异常！\033[0m"
     exit 1
 fi
 
-echo -e "\033[32m[4/7] 安装 MariaDB 数据库\033[0m"
-if [ -f /etc/debian_version ]; then
+echo -e "\033[32m[4/6] 安装 MariaDB 数据库（系统原生源）\033[0m"
+if [ "${OS_TYPE}" = "DEBIAN" ]; then
     apt install -y mariadb-server mariadb-client
 else
     yum install -y mariadb-server
 fi
 systemctl enable --now mariadb >/dev/null 2>&1
 
-# -------------------------- 数据库与配置阶段 --------------------------
-echo -e "\033[32m[5/7] 数据库初始化与权限配置\033[0m"
+# -------------------------- 第四步：数据库与配置阶段 --------------------------
+echo -e "\033[32m[5/6] 数据库初始化与权限配置\033[0m"
 mysql -uroot <<EOF
 SET PASSWORD FOR 'root'@'localhost' = PASSWORD('${MYSQL_ROOT_PWD}');
 DELETE FROM mysql.user WHERE User='';
@@ -150,7 +181,8 @@ GRANT ALL ON ${DB_NAME}.* TO '${DB_USER}'@'%';
 FLUSH PRIVILEGES;
 EOF
 
-echo -e "\033[32m[6/7] 拉取项目源码并生成配置\033[0m"
+echo -e "\033[32m[6/6] 拉取项目源码、生成配置、适配Nginx\033[0m"
+# 拉取源码并设置权限
 mkdir -p ${WEB_ROOT}
 git clone https://github.com/HYT-1840/xboard-mini.git ${WEB_ROOT} >/dev/null 2>&1
 chown -R www-data:www-data ${WEB_ROOT} 2>/dev/null || chown -R nginx:nginx ${WEB_ROOT}
@@ -176,12 +208,11 @@ function getDB() {
             ]
         );
     } catch (Exception \$e) {
-        die("数据库连接失败");
+        die("数据库连接失败：" . \$e->getMessage());
     }
 }
 EOF
 
-echo -e "\033[32m[7/7] 建表、初始化管理员、配置Nginx\033[0m"
 # 建表并插入管理员账号（哈希密码）
 mysql -u${DB_USER} -p${DB_PASS} ${DB_NAME} <<EOF
 DROP TABLE IF EXISTS users;
@@ -211,7 +242,12 @@ REPLACE INTO users (username, password, role)
 VALUES ('${ADMIN_USER}', '${ADMIN_PASS_HASH}', 'admin');
 EOF
 
-# Nginx站点配置（适配Debian/Ubuntu/CentOS）
+# Nginx站点配置（适配PHP版本的FPM sock文件）
+PHP_FPM_SOCK="/run/php/php${PHP_VERSION}-fpm.sock"
+# CentOS7 原生PHP7.2 sock文件路径适配
+if [ "${OS_TYPE}" = "CENTOS" ]; then
+    PHP_FPM_SOCK="/var/run/php-fpm/php-fpm.sock"
+fi
 cat >/etc/nginx/sites-available/xboard.conf 2>/dev/null || cat >/etc/nginx/conf.d/xboard.conf <<EOF
 server {
     listen 80;
@@ -225,8 +261,9 @@ server {
 
     location ~ \.php\$ {
         include fastcgi_params;
-        fastcgi_pass unix:/run/php/php7.4-fpm.sock;
+        fastcgi_pass unix:${PHP_FPM_SOCK};
         fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        fastcgi_param PATH_INFO \$fastcgi_path_info;
     }
 
     location ~ /\. {
@@ -236,14 +273,14 @@ server {
 EOF
 
 # 启用Nginx站点（仅Debian/Ubuntu）
-if [ -f /etc/debian_version ]; then
+if [ "${OS_TYPE}" = "DEBIAN" ]; then
     ln -sf /etc/nginx/sites-available/xboard.conf /etc/nginx/sites-enabled/
     rm -f /etc/nginx/sites-enabled/default
 fi
 
 # 防火墙放行80/443端口
-echo -e "\033[32m放行 80/443 端口\033[0m"
-if [ -f /etc/debian_version ]; then
+echo -e "\033[32m放行 80/443 端口（系统原生防火墙）\033[0m"
+if [ "${OS_TYPE}" = "DEBIAN" ]; then
     ufw allow 80/tcp >/dev/null 2>&1
     ufw allow 443/tcp >/dev/null 2>&1
 else
@@ -252,27 +289,28 @@ else
     firewall-cmd --reload >/dev/null 2>&1
 fi
 
-# 重启所有服务
+# 重启所有服务（适配PHP服务名）
 systemctl restart nginx >/dev/null 2>&1
-systemctl restart php7.4-fpm 2>/dev/null || systemctl restart php-fpm >/dev/null 2>&1
+systemctl restart ${PHP_FPM_SERVICE} >/dev/null 2>&1
 systemctl restart mariadb >/dev/null 2>&1
 
-# 安装完成提示
+# -------------------------- 安装完成提示 --------------------------
 clear
 echo "========================================================"
 echo -e "\033[32m           安装全部完成，无任何后续操作！\033[0m"
 echo "========================================================"
-echo "访问地址：http://${PANEL_DOMAIN}"
-echo "管理员账号：${ADMIN_USER}"
-echo "管理员密码：${ADMIN_PASS}"
+echo "📌 系统环境：${DISTRIB_ID:-CentOS} ${OS_VERSION} + 原生源PHP ${PHP_VERSION}"
+echo "🌐 访问地址：http://${PANEL_DOMAIN}"
+echo "🔑 管理员账号：${ADMIN_USER}"
+echo "🔑 管理员密码：${ADMIN_PASS}"
 echo ""
-echo "MySQL root 密码：${MYSQL_ROOT_PWD}"
+echo "🗄️ MySQL root 密码：${MYSQL_ROOT_PWD}"
 echo ""
-echo "数据库信息（多节点远程连接使用）："
-echo "数据库地址：${PANEL_DOMAIN}"
-echo "数据库名：${DB_NAME}"
-echo "数据库用户：${DB_USER}"
-echo "数据库密码：${DB_PASS}"
+echo "🗄️ 数据库信息（多节点远程连接）："
+echo "   地址：${PANEL_DOMAIN}"
+echo "   库名：${DB_NAME}"
+echo "   账号：${DB_USER}"
+echo "   密码：${DB_PASS}"
 echo "========================================================"
-echo "说明：访问域名/IP直接进入统一登录页，管理员/用户共用同一入口"
+echo "💡 说明：全程使用系统原生源，无第三方依赖，访问IP/域名直接登录"
 echo "========================================================"
