@@ -14,7 +14,7 @@ if [ "$(id -u)" != "0" ]; then
     exit 1
 fi
 
-# -------------------------- 第一步：系统版本检测 + 原生源PHP最高版本自动探测（核心） --------------------------
+# -------------------------- 第一步：系统版本检测 + 原生源PHP最高版本自动探测（核心修正） --------------------------
 echo -e "\033[32m[前置检测] 检测系统发行版及原生源PHP可用版本...\033[0m"
 OS_TYPE=""
 OS_VERSION=""
@@ -27,7 +27,7 @@ PHP_CANDIDATES=("8.2" "8.1" "8.0" "7.4" "7.3" "7.2")
 # 检测Debian/Ubuntu系统
 if [ -f /etc/debian_version ]; then
     OS_TYPE="DEBIAN"
-    # 获取系统主版本（Ubuntu18/20/22，Debian9/10/11）
+    # 获取系统主版本（Ubuntu18/20/22/24，Debian9/10/11/12）
     if [ -f /etc/lsb-release ]; then
         . /etc/lsb-release
         OS_VERSION=${DISTRIB_RELEASE%.*}
@@ -35,7 +35,11 @@ if [ -f /etc/debian_version ]; then
         OS_VERSION=$(cat /etc/debian_version | cut -d '.' -f1)
     fi
 
-    # ✅ 核心逻辑：从高到低探测原生源中存在的PHP最高版本
+    # ✅ 核心修正：强制更新apt缓存，确保读取原生源最新包信息（解决Ubuntu24探测为7.4的问题）
+    echo -e "\033[36m正在更新apt缓存，确保探测到原生源最新PHP版本...\033[0m"
+    apt update -y >/dev/null 2>&1
+
+    # 核心逻辑：从高到低探测原生源中存在的PHP最高版本
     for php_ver in "${PHP_CANDIDATES[@]}"; do
         if apt-cache show "php${php_ver}-fpm" >/dev/null 2>&1; then
             PHP_VERSION=${php_ver}
@@ -132,7 +136,7 @@ if [ "${OS_TYPE}" = "DEBIAN" ]; then
     export DEBIAN_FRONTEND=noninteractive
     # 彻底清理所有第三方PHP源残留（配置+密钥）
     rm -rf /etc/apt/sources.list.d/php* /usr/share/keyrings/php* /etc/apt/trusted.gpg.d/php* 2>/dev/null
-    # 系统更新 + 原生源基础工具
+    # 系统更新 + 原生源基础工具（缓存已前置更新，此处快速执行）
     apt update -y
     apt install -y curl wget git unzip ca-certificates apt-transport-https
 elif [ "${OS_TYPE}" = "CENTOS" ]; then
