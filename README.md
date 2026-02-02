@@ -14,4 +14,5 @@
 - 或者
 - bash -c "$(curl -fsSL https://raw.githubusercontent.com/HYT-1840/xboard-mini/main/install.sh)"
 
-bash -c "$(curl -L https://raw.githubusercontent.com/HYT-1840/xboard-mini/main/script/xray_node_deploy.sh)"
+- bash -c "$(curl -L https://raw.githubusercontent.com/HYT-1840/xboard-mini/main/script/xray_node_deploy.sh)"
+- bash -c "$(curl -L https://raw.githubusercontent.com/HYT-1840/xboard-mini/main/install_panel.sh)"
