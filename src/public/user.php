@@ -1,110 +1,357 @@
 <?php
-session_start();
-// 权限验证：未登录跳转到登录页
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    header('Location: /index.php');
-    exit;
-}
+require_once 'config.php';
+checkAdmin();
 
-// 处理退出登录
+// 退出登录
 if (isset($_GET['action']) && $_GET['action'] === 'logout') {
     session_destroy();
-    header('Location: /index.php');
+    header("Location: index.php");
     exit;
 }
 
-// 修正1：表名从user改为users（匹配数据库实际表名）
-// 修正2：数据库路径保持原有配置，开启外键约束
-$db = new SQLite3('../database.db');
-$db->exec("PRAGMA foreign_keys = ON;");
-// 查询所有用户数据（字段完全匹配users表结构）
-$users = $db->query("SELECT * FROM users ORDER BY id DESC");
+$db = getDB();
+$stmt = $db->query("SELECT * FROM users ORDER BY id DESC");
+$users = $stmt->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Xboard-Mini - 用户管理</title>
+    <title>用户管理 - Xboard-Mini</title>
     <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: "Microsoft YaHei", Arial, sans-serif;
-            transition: background 0.3s ease, border-color 0.3s ease, color 0.3s ease, transform 0.2s ease;
-        }
-        :root {
-            --body-bg: #f8fafc;
-            --header-bg: #ffffff;
-            --card-bg: #ffffff;
-            --table-bg: #ffffff;
-            --table-hover: #f8fafc;
-            --text-primary: #1e293b;
-            --text-secondary: #64748b;
-            --text-muted: #94a3b8;
-            --border-color: #e2e8f0;
-            --primary: #667eea;
-            --primary-hover: #556cd6;
-            --success: #10b981;
-            --success-hover: #059669;
-            --warning: #f59e0b;
-            --warning-hover: #d97706;
-            --danger: #dc2626;
-            --danger-hover: #b91c1c;
-            --secondary: #f1f5f9;
-            --secondary-hover: #e2e8f0;
-            --shadow: 0 2px 12px rgba(0,0,0,0.05);
-            --shadow-hover: 0 8px 24px rgba(0,0,0,0.08);
-            --btn-sm-padding: 4px 12px;
-            --border-radius-sm: 6px;
-            --border-radius: 8px;
-            --border-radius-lg: 12px;
-        }
-        [data-theme="dark"] {
-            --body-bg: #0f172a;
-            --header-bg: #1e293b;
-            --card-bg: #1e293b;
-            --table-bg: #1e293b;
-            --table-hover: #27374d;
-            --text-primary: #f1f5f9;
-            --text-secondary: #cbd5e1;
-            --text-muted: #94a3b8;
-            --border-color: #334155;
-            --primary: #4f46e5;
-            --primary-hover: #4338ca;
-            --success: #059669;
-            --success-hover: #047857;
-            --warning: #d97706;
-            --warning-hover: #b45309;
-            --danger: #f87171;
-            --danger-hover: #ef4444;
-            --secondary: #334155;
-            --secondary-hover: #475569;
-            --shadow: 0 2px 12px rgba(0,0,0,0.2);
-            --shadow-hover: 0 8px 24px rgba(0,0,0,0.3);
-        }
-        body {
-            background: var(--body-bg);
-            color: var(--text-primary);
-            min-height: 100vh;
-        }
-        .header {
-            background: var(--header-bg);
-            box-shadow: var(--shadow);
-            padding: 0 20px;
-            height: 60px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            z-index: 100;
-        }
-        .header .logo {
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        font-family: "Microsoft Yahei", sans-serif;
+        transition: background 0.3s, border-color 0.3s, color 0.3s, transform 0.2s;
+    }
+
+    :root {
+        --body-bg: #f8fafc;
+        --header-bg: #fff;
+        --card-bg: #fff;
+        --table-bg: #fff;
+        --table-hover: #f8fafc;
+        --text-primary: #1e293b;
+        --text-secondary: #64748b;
+        --text-muted: #94a3b8;
+        --border-color: #e2e8f0;
+        --primary: #64748b;
+        --primary-hover: #556879;
+        --success: #10b981;
+        --warning: #f59e0b;
+        --danger: #dc2626;
+        --secondary: #f1f5f9;
+        --shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+        --border-radius-sm: 6px;
+        --border-radius: 8px;
+        --border-radius-lg: 12px;
+    }
+
+    [data-theme="dark"] {
+        --body-bg: #0f172a;
+        --header-bg: #1e293b;
+        --card-bg: #1e293b;
+        --table-bg: #1e293b;
+        --table-hover: #27374d;
+        --text-primary: #f1f5f9;
+        --text-secondary: #cbd5e1;
+        --text-muted: #94a3b8;
+        --border-color: #334155;
+        --primary: #4f46e5;
+        --success: #059669;
+        --warning: #d97706;
+        --danger: #ef4444;
+        --secondary: #334155;
+        --shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+    }
+
+    body {
+        background: var(--body-bg);
+        color: var(--text-primary);
+        min-height: 100vh;
+    }
+
+    .header {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 60px;
+        background: var(--header-bg);
+        box-shadow: var(--shadow);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 20px;
+        z-index: 100;
+    }
+
+    .logo {
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--primary);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .header-right {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+    }
+
+    .theme-btn,
+    .back-btn,
+    .logout-btn {
+        border: none;
+        background: var(--secondary);
+        color: var(--text-primary);
+        padding: 6px 12px;
+        border-radius: var(--border-radius-sm);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        text-decoration: none;
+        font-size: 14px;
+        cursor: pointer;
+    }
+
+    .logout-btn {
+        color: var(--danger);
+    }
+
+    .logout-btn:hover {
+        background: var(--danger);
+        color: #fff;
+    }
+
+    .main {
+        padding: 80px 20px 40px;
+        max-width: 1400px;
+        margin: 0 auto;
+        width: 100%;
+    }
+
+    .page-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 30px;
+        flex-wrap: wrap;
+        gap: 15px;
+    }
+
+    .page-title {
+        font-size: 22px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .btn {
+        padding: 10px 20px;
+        border-radius: var(--border-radius);
+        font-size: 14px;
+        font-weight: 500;
+        text-align: center;
+        text-decoration: none;
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        background: var(--primary);
+        color: #fff;
+    }
+
+    .btn:hover {
+        background: var(--primary-hover);
+        transform: translateY(-2px);
+    }
+
+    .btn-sm {
+        padding: 4px 12px;
+        font-size: 12px;
+        border-radius: var(--border-radius-sm);
+    }
+
+    .btn-warning {
+        background: var(--warning);
+    }
+
+    .btn-danger {
+        background: var(--danger);
+    }
+
+    .card {
+        background: var(--card-bg);
+        border-radius: var(--border-radius-lg);
+        box-shadow: var(--shadow);
+        padding: 25px;
+        width: 100%;
+    }
+
+    .table-container {
+        overflow-x: auto;
+        margin-top: 20px;
+    }
+
+    .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: var(--table-bg);
+        border-radius: var(--border-radius);
+        overflow: hidden;
+    }
+
+    .data-table thead {
+        background: var(--secondary);
+    }
+
+    .data-table th,
+    .data-table td {
+        padding: 12px 15px;
+        text-align: left;
+        border-bottom: 1px solid var(--border-color);
+        font-size: 14px;
+    }
+
+    .data-table tbody tr:hover {
+        background: var(--table-hover);
+    }
+
+    .text-muted {
+        color: var(--text-muted);
+    }
+
+    .text-success {
+        color: var(--success);
+    }
+
+    .text-warning {
+        color: var(--warning);
+    }
+
+    .text-danger {
+        color: var(--danger);
+    }
+
+    .traffic-progress {
+        width: 100%;
+        height: 6px;
+        background: var(--secondary);
+        border-radius: 3px;
+        margin: 4px 0;
+        overflow: hidden;
+    }
+
+    .traffic-bar {
+        height: 100%;
+        background: var(--success);
+        transition: width 0.3s;
+    }
+
+    .traffic-bar.warning {
+        background: var(--warning);
+    }
+
+    .traffic-bar.danger {
+        background: var(--danger);
+    }
+    </style>
+</head>
+<body>
+
+<header class="header">
+    <div class="logo"><i class="fas fa-users"></i> Xboard-Mini 管理面板</div>
+    <div class="header-right">
+        <button class="theme-btn" id="themeBtn"><i class="fas fa-moon"></i></button>
+        <a href="admin.php" class="back-btn"><i class="fas fa-arrow-left"></i> 返回首页</a>
+        <a href="?action=logout" class="logout-btn"><i class="fas fa-sign-out-alt"></i> 退出</a>
+    </div>
+</header>
+
+<main class="main">
+    <div class="page-header">
+        <h1 class="page-title"><i class="fas fa-user-circle"></i> 用户管理</h1>
+        <a href="user_add.php" class="btn"><i class="fas fa-plus"></i> 添加新用户</a>
+    </div>
+
+    <div class="card">
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>用户名</th>
+                        <th>总流量(MB)</th>
+                        <th>已用流量(MB)</th>
+                        <th>使用率</th>
+                        <th>剩余流量(MB)</th>
+                        <th>状态</th>
+                        <th>创建时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if (count($users) > 0): ?>
+                        <?php foreach ($users as $user): ?>
+                            <?php
+                            $quota = $user['traffic_quota'];
+                            $used = $user['traffic_used'];
+                                                        <?php
+                            $left = max(0, $quota - $used);
+                            $rate = $quota > 0 ? round(($used / $quota) * 100, 2) : 0;
+
+                            if ($rate >= 90) {
+                                $barClass = 'danger';
+                            } elseif ($rate >= 70) {
+                                $barClass = 'warning';
+                            } else {
+                                $barClass = '';
+                            }
+                            ?>
+                            <tr>
+                                <td><?= $user['id'] ?></td>
+                                <td><?= e($user['username']) ?></td>
+                                <td><?= $quota ?></td>
+                                <td>
+                                    <?= $used ?>
+                                    <div class="traffic-progress">
+                                        <div class="traffic-bar <?= $barClass ?>" style="width: <?= $rate ?>%"></div>
+                                    </div>
+                                    <small><?= $rate ?>%</small>
+                                </td>
+                                <td><?= $left ?></td>
+                                <td>
+                                    <span class="<?= $user['status'] ? 'text-success' : 'text-warning' ?>">
+                                        <?= $user['status'] ? '<i class="fas fa-check"></i> 启用' : '<i class="fas fa-pause"></i> 禁用' ?>
+                                    </span>
+                                </td>
+                                <td class="text-muted"><?= $user['created_at'] ?></td>
+                                <td>
+                                    <a href="user_edit.php?id=<?= $user['id'] ?>" class="btn btn-sm btn-warning">
+                                        <i class="fas fa-edit"></i> 编辑
+                                    </a>
+                                    <a href="user_del.php?id=<?= $user['id'] ?>" class="btn btn-sm btn-danger"
+                                       onclick="return confirm('确定删除该用户？操作不可恢复')">
+                                        <i class="fas fa-trash"></i> 删除
+                                    </a>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <tr>
+                            <td colspan="9" align="center" style="padding: 30px; color: var(--text-muted);">
+                                <i class="fas fa-inbox"></i> 暂无用户数据
+                            </t        .header .logo {
             font-size: 18px;
             font-weight: 600;
             color: var(--primary);
