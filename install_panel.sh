@@ -106,16 +106,21 @@ if [ -z "${ADMIN_PASS}" ]; then
     echo -e "\033[32m使用随机管理员密码: ${ADMIN_PASS}\033[0m"
 fi
 
-# -------------------------- 第三步：环境安装阶段（系统原生源） --------------------------
-echo -e "\033[32m[1/6] 系统更新与基础工具安装\033[0m"
+# -------------------------- 第三步：环境安装阶段（系统原生源，无第三方） --------------------------
+echo -e "\033[32m[1/6] 清理第三方PHP源 + 系统更新 + 基础工具安装\033[0m"
 if [ "${OS_TYPE}" = "DEBIAN" ]; then
     export DEBIAN_FRONTEND=noninteractive
-    # Debian/Ubuntu 原生源 + HTTPS支持
+    # ✅ 核心修复：彻底清理所有第三方PHP源（解决418/签名错误）
+    rm -rf /etc/apt/sources.list.d/php* /usr/share/keyrings/php* /etc/apt/trusted.gpg.d/php* 2>/dev/null
+    # 系统更新 + 原生源基础工具（仅系统原生源，无第三方）
     apt update -y
     apt install -y curl wget git unzip ca-certificates apt-transport-https
 elif [ "${OS_TYPE}" = "CENTOS" ]; then
-    # CentOS7 原生EPEL源（基础工具依赖）
+    # 清理CentOS第三方PHP源（如remi/php等）
+    rm -rf /etc/yum.repos.d/remi* /etc/yum.repos.d/php* 2>/dev/null
+    # CentOS7 原生EPEL源（官方维护，非第三方）
     yum install -y epel-release
+    yum clean all && yum makecache fast
     yum update -y
     yum install -y curl wget git unzip
 fi
@@ -130,7 +135,7 @@ systemctl enable --now nginx >/dev/null 2>&1
 
 echo -e "\033[32m[3/6] 安装 PHP ${PHP_VERSION} 及必需扩展（系统原生源）\033[0m"
 if [ "${OS_TYPE}" = "DEBIAN" ]; then
-    # Debian/Ubuntu 原生源PHP扩展（匹配检测到的版本）
+    # Debian/Ubuntu 纯原生源PHP扩展（匹配检测到的版本，无任何第三方）
     apt install -y \
         php${PHP_VERSION}-fpm \
         php${PHP_VERSION}-mysql \
@@ -138,7 +143,7 @@ if [ "${OS_TYPE}" = "DEBIAN" ]; then
         php${PHP_VERSION}-mbstring \
         php${PHP_VERSION}-xml
 elif [ "${OS_TYPE}" = "CENTOS" ]; then
-    # CentOS7 原生EPEL源PHP7.2及扩展（原生包名）
+    # CentOS7 纯原生EPEL源PHP7.2及扩展（官方维护，非第三方）
     yum install -y \
         php \
         php-fpm \
@@ -147,10 +152,10 @@ elif [ "${OS_TYPE}" = "CENTOS" ]; then
         php-mbstring \
         php-xml
 fi
-# 启动PHP-FPM（适配检测到的服务名）
+# 启动PHP-FPM（适配检测到的原生服务名）
 systemctl enable --now ${PHP_FPM_SERVICE} >/dev/null 2>&1
 
-# 密码哈希生成（PHP原生环境已就绪）
+# 密码哈希生成（纯原生PHP环境，无第三方干扰）
 ADMIN_PASS_HASH=$(php -r "echo password_hash('${ADMIN_PASS}', PASSWORD_DEFAULT);" 2>/dev/null)
 if [ -z "${ADMIN_PASS_HASH}" ]; then
     echo -e "\033[31m密码哈希生成失败，系统原生PHP环境异常！\033[0m"
@@ -242,7 +247,7 @@ REPLACE INTO users (username, password, role)
 VALUES ('${ADMIN_USER}', '${ADMIN_PASS_HASH}', 'admin');
 EOF
 
-# Nginx站点配置（适配PHP版本的FPM sock文件）
+# Nginx站点配置（适配PHP版本的FPM sock文件，纯原生路径）
 PHP_FPM_SOCK="/run/php/php${PHP_VERSION}-fpm.sock"
 # CentOS7 原生PHP7.2 sock文件路径适配
 if [ "${OS_TYPE}" = "CENTOS" ]; then
@@ -278,7 +283,7 @@ if [ "${OS_TYPE}" = "DEBIAN" ]; then
     rm -f /etc/nginx/sites-enabled/default
 fi
 
-# 防火墙放行80/443端口
+# 防火墙放行80/443端口（系统原生防火墙）
 echo -e "\033[32m放行 80/443 端口（系统原生防火墙）\033[0m"
 if [ "${OS_TYPE}" = "DEBIAN" ]; then
     ufw allow 80/tcp >/dev/null 2>&1
@@ -289,7 +294,7 @@ else
     firewall-cmd --reload >/dev/null 2>&1
 fi
 
-# 重启所有服务（适配PHP服务名）
+# 重启所有服务（适配PHP原生服务名）
 systemctl restart nginx >/dev/null 2>&1
 systemctl restart ${PHP_FPM_SERVICE} >/dev/null 2>&1
 systemctl restart mariadb >/dev/null 2>&1
@@ -297,9 +302,9 @@ systemctl restart mariadb >/dev/null 2>&1
 # -------------------------- 安装完成提示 --------------------------
 clear
 echo "========================================================"
-echo -e "\033[32m           安装全部完成，无任何后续操作！\033[0m"
+echo -e "\033[32m           安装全部完成，无任何第三方依赖！\033[0m"
 echo "========================================================"
-echo "📌 系统环境：${DISTRIB_ID:-CentOS} ${OS_VERSION} + 原生源PHP ${PHP_VERSION}"
+echo "📌 系统环境：${DISTRIB_ID:-CentOS} ${OS_VERSION} + 纯原生源PHP ${PHP_VERSION}"
 echo "🌐 访问地址：http://${PANEL_DOMAIN}"
 echo "🔑 管理员账号：${ADMIN_USER}"
 echo "🔑 管理员密码：${ADMIN_PASS}"
@@ -312,5 +317,5 @@ echo "   库名：${DB_NAME}"
 echo "   账号：${DB_USER}"
 echo "   密码：${DB_PASS}"
 echo "========================================================"
-echo "💡 说明：全程使用系统原生源，无第三方依赖，访问IP/域名直接登录"
+echo "💡 说明：全程使用系统原生源/EPEL源，无任何第三方源，稳定无兼容问题"
 echo "========================================================"
