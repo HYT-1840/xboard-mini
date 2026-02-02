@@ -2,7 +2,7 @@
 - 面向个人与小团队、低配置服务器
 - 保留多节点管理+用户+流量配额
 - 无Redis无Docker无冗余组件
-- 基于Nginx+PHP+SQLite原生运行。
+- 基于Nginx+PHP+MYsql原生运行。
 
 # 系统要求
 - Ubuntu 20.04+ / Debian 11+
