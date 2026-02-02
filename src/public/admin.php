@@ -1,110 +1,127 @@
 <?php
-session_start();
-// 未登录则跳转到登录页
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    header('Location: /index.php');
-    exit;
-}
+require_once 'config.php';
+checkAdmin();
 
-// 处理退出登录
 if (isset($_GET['action']) && $_GET['action'] === 'logout') {
     session_destroy();
-    header('Location: /index.php');
+    header("Location: index.php");
     exit;
 }
 
-// 修正：数据库路径 ../database.db（public/admin.php → 上级INSTALL_DIR）
-$db = new SQLite3('../database.db');
-$node_count = $db->querySingle("SELECT COUNT(*) FROM node") ?: 0;
-$user_count = $db->querySingle("SELECT COUNT(*) FROM user") ?: 0;
+$db = getDB();
+// 统计数据
+$userCount = $db->query("SELECT COUNT(*) AS cnt FROM users")->fetch()['cnt'];
+$nodeCount = $db->query("SELECT COUNT(*) AS cnt FROM nodes")->fetch()['cnt'];
+$totalQuota = $db->query("SELECT SUM(traffic_quota) AS total FROM users")->fetch()['total'] ?? 0;
+$totalUsed = $db->query("SELECT SUM(traffic_used) AS total FROM users")->fetch()['total'] ?? 0;
+$enabledUser = $db->query("SELECT COUNT(*) AS cnt FROM users WHERE status=1")->fetch()['cnt'];
+$enabledNode = $db->query("SELECT COUNT(*) AS cnt FROM nodes WHERE status=1")->fetch()['cnt'];
 ?>
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Xboard-Mini - 管理中心</title>
+    <title>管理首页 - Xboard-Mini</title>
     <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: "Microsoft YaHei", Arial, sans-serif;
-            transition: background 0.3s ease, border-color 0.3s ease, color 0.3s ease, transform 0.2s ease;
-        }
-        :root {
-            --body-bg: #f8fafc;
-            --header-bg: #ffffff;
-            --card-bg: #ffffff;
-            --text-primary: #1e293b;
-            --text-secondary: #64748b;
-            --border-color: #e2e8f0;
-            --primary: #667eea;
-            --primary-hover: #556cd6;
-            --success: #10b981;
-            --success-hover: #059669;
-            --warning: #f59e0b;
-            --warning-hover: #d97706;
-            --danger: #dc2626;
-            --danger-hover: #b91c1c;
-            --secondary: #f1f5f9;
-            --secondary-hover: #e2e8f0;
-            --shadow: 0 2px 12px rgba(0,0,0,0.05);
-            --shadow-hover: 0 8px 24px rgba(0,0,0,0.08);
-        }
-        [data-theme="dark"] {
-            --body-bg: #0f172a;
-            --header-bg: #1e293b;
-            --card-bg: #1e293b;
-            --text-primary: #f1f5f9;
-            --text-secondary: #cbd5e1;
-            --border-color: #334155;
-            --primary: #4f46e5;
-            --primary-hover: #4338ca;
-            --success: #059669;
-            --success-hover: #047857;
-            --warning: #d97706;
-            --warning-hover: #b45309;
-            --danger: #f87171;
-            --danger-hover: #ef4444;
-            --secondary: #334155;
-            --secondary-hover: #475569;
-            --shadow: 0 2px 12px rgba(0,0,0,0.2);
-            --shadow-hover: 0 8px 24px rgba(0,0,0,0.3);
-        }
-        body {
-            background: var(--body-bg);
-            color: var(--text-primary);
-            min-height: 100vh;
-        }
-        .header {
-            background: var(--header-bg);
-            box-shadow: var(--shadow);
-            padding: 0 20px;
-            height: 60px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            z-index: 100;
-        }
-        .header .logo {
-            font-size: 18px;
-            font-weight: 600;
-            color: var(--primary);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .header-right {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
+    *{margin:0;padding:0;box-sizing:border-box;font-family:"Microsoft Yahei",sans-serif;transition:background 0.3s,border-color 0.3s,color 0.3s,transform 0.2s;}
+    :root {
+        --body-bg:#f8fafc;--header-bg:#fff;--card-bg:#fff;--text-primary:#1e293b;--text-secondary:#64748b;
+        --border-color:#e2e8f0;--primary:#64748b;--success:#10b981;--warning:#f59e0b;--danger:#dc2626;
+        --secondary:#f1f5f9;--shadow:0 2px 12px rgba(0,0,0,0.05);--border-radius:8px;--border-radius-lg:12px;
+    }
+    [data-theme="dark"] {
+        --body-bg:#0f172a;--header-bg:#1e293b;--card-bg:#1e293b;--text-primary:#f1f5f9;--text-secondary:#cbd5e1;
+        --border-color:#334155;--primary:#4f46e5;--success:#059669;--warning:#d9706;--danger:#ef4444;
+        --secondary:#334155;--shadow:0 2px 12px rgba(0,0,0,0.2);
+    }
+    body{background:var(--body-bg);color:var(--text-primary);min-height:100vh;}
+    .header{position:fixed;top:0;left:0;right:0;height:60px;background:var(--header-bg);box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between;padding:0 20px;z-index:100;}
+    .logo{font-size:18px;font-weight:600;color:var(--primary);display:flex;align-items:center;gap:8px;}
+    .header-right{display:flex;align-items:center;gap:12px;}
+    .theme-btn,.logout-btn,.pwd-btn{border:none;background:var(--secondary);color:var(--text-primary);padding:6px 12px;border-radius:6px;display:flex;align-items:center;gap:6px;text-decoration:none;font-size:14px;cursor:pointer;}
+    .main{padding:80px 20px 40px;max-width:1200px;margin:0 auto;}
+    .page-title{font-size:22px;font-weight:600;margin-bottom:25px;display:flex;align-items:center;gap:8px;}
+    .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;margin-bottom:30px;}
+    .stat-card{background:var(--card-bg);border-radius:var(--border-radius-lg);box-shadow:var(--shadow);padding:20px;display:flex;align-items:center;gap:15px;}
+    .stat-icon{width:48px;height:48px;border-radius:50%;background:var(--secondary);display:flex;align-items:center;justify-content:center;color:var(--primary);font-size:20px;}
+    .stat-text h3{font-size:24px;font-weight:600;margin-bottom:4px;}
+    .stat-text p{color:var(--text-secondary);font-size:14px;}
+    .menu-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;}
+    .menu-card{background:var(--card-bg);border-radius:var(--border-radius-lg);box-shadow:var(--shadow);padding:25px;text-align:center;text-decoration:none;color:var(--text-primary);transition:0.3s;}
+    .menu-card:hover{transform:translateY(-4px);}
+    .menu-card i{font-size:28px;color:var(--primary);margin-bottom:15px;}
+    .menu-card h4{font-size:16px;margin-bottom:8px;}
+    .menu-card p{font-size:12px;color:var(--text-secondary);}
+    </style>
+</head>
+<body>
+<header class="header">
+    <div class="logo"><i class="fas fa-server"></i> Xboard-Mini</div>
+    <div class="header-right">
+        <button class="theme-btn" id="themeBtn"><i class="fas fa-moon"></i></button>
+        <a href="change_pwd.php" class="pwd-btn"><i class="fas fa-lock"></i> 修改密码</a>
+        <a href="?action=logout" class="logout-btn"><i class="fas fa-sign-out-alt"></i> 退出</a>
+    </div>
+</header>
+<main class="main">
+    <h1 class="page-title"><i class="fas fa-tachometer-alt"></i> 控制台概览</h1>
+    <div class="stat-grid">
+        <div class="stat-card">
+            <div class="stat-icon"><i class="fas fa-users"></i></div>
+            <div class="stat-text">
+                <h3><?=$userCount?></h3>
+                <p>总用户 / 启用 <?=$enabledUser?></p>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon"><i class="fas fa-network-wired"></i></div>
+            <div class="stat-text">
+                <h3><?=$nodeCount?></h3>
+                <p>节点 / 在线 <?=$enabledNode?></p>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon"><i class="fas fa-database"></i></div>
+            <div class="stat-text">
+                <h3><?=round($totalQuota/1024,2)?> GB</h3>
+                <p>总流量配额</p>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon"><i class="fas fa-chart-line"></i></div>
+            <div class="stat-text">
+                <h3><?=round($totalUsed/1024,2)?> GB</h3>
+                <p>总已用流量</p>
+            </div>
+        </div>
+    </div>
+    <div class="menu-grid">
+        <a href="user.php" class="menu-card">
+            <i class="fas fa-user-circle"></i>
+            <h4>用户管理</h4>
+            <p>添加、编辑、查询用户</p>
+        </a>
+        <a href="node.php" class="menu-card">
+            <i class="fas fa-server"></i>
+            <h4>节点管理</h4>
+            <p>节点配置与状态</p>
+        </a>
+        <a href="change_pwd.php" class="menu-card">
+            <i class="fas fa-lock"></i>
+            <h4>修改密码</h4>
+            <p>更新管理员密码</p>
+        </a>
+    </div>
+</main>
+<script>
+const t=document.getElementById('themeBtn'),h=document.documentElement,s=localStorage.getItem('theme')||'light';
+h.setAttribute('data-theme',s);t.innerHTML=`<i class="fas fa-${s==='dark'?'sun':'moon'}"></i>`;
+t.onclick=()=>{const c=h.getAttribute('data-theme')==='dark'?'light':'dark';h.setAttribute('data-theme',c);localStorage.setItem('theme',c);t.innerHTML=`<i class="fas fa-${c==='dark'?'sun':'moon'}"></i>`;}
+</script>
+</body>
+</html>        }
         .theme-btn {
             width: 36px;
             height: 36px;
